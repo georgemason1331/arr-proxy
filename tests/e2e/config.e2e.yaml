@@ -1,0 +1,42 @@
+server:
+  host: 0.0.0.0
+  unified_port: 8787
+  log_level: debug
+  # Deterministic for the suite: every assertion about which instance was hit
+  # would be meaningless if a cached body could answer instead.
+  cache_ttl: 0
+  fail_open: true
+  id_block: 10000000
+  id_fallback_probe: true
+
+apps:
+  sonarr:
+    api_key: e2e-sonarr-combined-key
+    port: 8989
+    instance_name: Sonarr (combined)
+    instances:
+      - name: sonarr-main
+        url: http://sonarr-main:8989
+        api_key: mainkey-sonarr
+        default: true
+      - name: sonarr-anime
+        url: http://sonarr-anime:8989
+        api_key: animekey-sonarr
+        routing:
+          series_types: [anime]
+          root_folders: ["/data/media/anime"]
+
+  radarr:
+    api_key: e2e-radarr-combined-key
+    port: 7878
+    instance_name: Radarr (combined)
+    instances:
+      - name: radarr-main
+        url: http://radarr-main:7878
+        api_key: mainkey-radarr
+        default: true
+      - name: radarr-anime
+        url: http://radarr-anime:7878
+        api_key: animekey-radarr
+        routing:
+          root_folders: ["/data/media/anime-movies"]

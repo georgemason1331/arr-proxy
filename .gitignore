@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+config.yaml
+appdata/
+tests/e2e/generated/

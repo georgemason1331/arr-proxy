@@ -1,0 +1,312 @@
+{
+  "movie": [
+    {
+      "id": 1,
+      "title": "Your Name",
+      "tmdbId": 372058,
+      "year": 2016,
+      "path": "/data/media/anime-movies/Your Name",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/1/poster.jpg"
+        }
+      ],
+      "hasFile": true,
+      "sizeOnDisk": 3000,
+      "titleSlug": "your-name"
+    },
+    {
+      "id": 2,
+      "title": "Suzume",
+      "tmdbId": 916224,
+      "year": 2022,
+      "path": "/data/media/anime-movies/Suzume",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/2/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 0,
+      "titleSlug": "suzume"
+    }
+  ],
+  "calendar": [
+    {
+      "id": 1,
+      "title": "Your Name",
+      "tmdbId": 372058,
+      "year": 2016,
+      "path": "/data/media/anime-movies/Your Name",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/1/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 3000,
+      "inCinemas": "2026-09-17T00:00:00Z",
+      "digitalRelease": "2026-10-17T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Suzume",
+      "tmdbId": 916224,
+      "year": 2022,
+      "path": "/data/media/anime-movies/Suzume",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/2/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 0,
+      "inCinemas": "2026-09-19T00:00:00Z",
+      "digitalRelease": "2026-10-19T00:00:00Z"
+    }
+  ],
+  "queue": [
+    {
+      "id": 501,
+      "movieId": 1,
+      "title": "Your Name.2026.1080p",
+      "size": 2000.0,
+      "sizeleft": 200.0,
+      "status": "downloading",
+      "timeleft": "00:01:00",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      },
+      "downloadId": "MHASH1",
+      "movie": {
+        "id": 1,
+        "title": "Your Name",
+        "tmdbId": 372058,
+        "path": "/data/media/anime-movies/Your Name"
+      }
+    },
+    {
+      "id": 502,
+      "movieId": 2,
+      "title": "Suzume.2026.1080p",
+      "size": 4000.0,
+      "sizeleft": 400.0,
+      "status": "downloading",
+      "timeleft": "00:02:00",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      },
+      "downloadId": "MHASH2",
+      "movie": {
+        "id": 2,
+        "title": "Suzume",
+        "tmdbId": 916224,
+        "path": "/data/media/anime-movies/Suzume"
+      }
+    }
+  ],
+  "history": [
+    {
+      "id": 701,
+      "movieId": 1,
+      "eventType": "grabbed",
+      "sourceTitle": "Your Name",
+      "date": "2026-09-10T01:00:00Z",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      }
+    },
+    {
+      "id": 702,
+      "movieId": 2,
+      "eventType": "grabbed",
+      "sourceTitle": "Suzume",
+      "date": "2026-09-11T02:00:00Z",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      }
+    }
+  ],
+  "wanted": [
+    {
+      "id": 1,
+      "title": "Your Name",
+      "tmdbId": 372058,
+      "year": 2016,
+      "path": "/data/media/anime-movies/Your Name",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/1/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 3000
+    },
+    {
+      "id": 2,
+      "title": "Suzume",
+      "tmdbId": 916224,
+      "year": 2022,
+      "path": "/data/media/anime-movies/Suzume",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/2/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 0
+    }
+  ],
+  "qualityprofile": [
+    {
+      "id": 1,
+      "name": "[Anime] Remux-1080p",
+      "upgradeAllowed": true,
+      "cutoff": 3,
+      "items": [
+        {
+          "id": 1000,
+          "quality": {
+            "id": 3,
+            "name": "WEBDL-1080p"
+          },
+          "allowed": true
+        }
+      ]
+    }
+  ],
+  "rootfolder": [
+    {
+      "id": 1,
+      "path": "/data/media/anime-movies",
+      "accessible": true,
+      "freeSpace": 900
+    }
+  ],
+  "tag": [
+    {
+      "id": 1,
+      "label": "anime"
+    }
+  ],
+  "health": [
+    {
+      "source": "DownloadClientCheck",
+      "type": "warning",
+      "message": "radarr-anime client unavailable",
+      "wikiUrl": ""
+    }
+  ],
+  "diskspace": [
+    {
+      "path": "/data",
+      "label": "data",
+      "freeSpace": 500,
+      "totalSpace": 4000
+    }
+  ],
+  "command": [
+    {
+      "id": 1,
+      "name": "RefreshMovie",
+      "status": "completed"
+    }
+  ],
+  "collection": [
+    {
+      "id": 1,
+      "title": "radarr-anime collection",
+      "tmdbId": 9001
+    }
+  ],
+  "lookup": [
+    {
+      "title": "Akira",
+      "tmdbId": 149,
+      "year": 1988,
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/0/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/0/poster.jpg"
+        }
+      ],
+      "id": 2,
+      "titleSlug": "akira"
+    }
+  ]
+}

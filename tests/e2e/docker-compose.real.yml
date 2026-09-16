@@ -1,0 +1,123 @@
+name: arrproxy-real
+
+# Four genuine *arr instances -- two Sonarr, two Radarr -- mirroring the
+# regular/anime split of the real stack.  The mock suite proves the merge logic;
+# this one proves the proxy against the actual API surface: real auth, real
+# response shapes, real paged envelopes, and real colliding ids (every fresh
+# instance numbers its quality profiles and tags from 1).
+#
+# API keys are not pre-seeded.  Each instance generates its own on first start
+# and run_real.sh reads them back out, which is far less brittle than trying to
+# plant a config.xml before the image's own init has run.
+
+x-arr: &arr
+  restart: "no"
+  environment:
+    PUID: "1000"
+    PGID: "1000"
+    TZ: UTC
+  healthcheck:
+    interval: 5s
+    timeout: 5s
+    retries: 60
+    start_period: 15s
+
+services:
+  real-sonarr-main:
+    <<: *arr
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: real-sonarr-main
+    volumes:
+      - sonarr-main-config:/config
+      - media:/data
+    ports: ["19101:8989"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8989/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+
+  real-sonarr-anime:
+    <<: *arr
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: real-sonarr-anime
+    volumes:
+      - sonarr-anime-config:/config
+      - media:/data
+    ports: ["19102:8989"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8989/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+
+  real-radarr-main:
+    <<: *arr
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: real-radarr-main
+    volumes:
+      - radarr-main-config:/config
+      - media:/data
+    ports: ["19103:7878"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7878/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+
+  real-radarr-anime:
+    <<: *arr
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: real-radarr-anime
+    volumes:
+      - radarr-anime-config:/config
+      - media:/data
+    ports: ["19104:7878"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7878/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+
+  proxy:
+    image: arrproxy:e2e
+    container_name: real-proxy
+    restart: "no"
+    profiles: ["proxy", "test"]
+    environment:
+      ARRPROXY_CONFIG: /config/config.yaml
+    volumes:
+      - ./generated/config.real.yaml:/config/config.yaml:ro
+    ports:
+      - "19189:8989"
+      - "19178:7878"
+      - "19187:8787"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/-/health',timeout=4).status==200 else 1)"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 3s
+
+  tester:
+    image: arrproxy-tester:e2e
+    container_name: real-tester
+    profiles: ["test"]
+    restart: "no"
+    volumes:
+      - ./test_real.py:/tests/test_real.py:ro
+      - ./generated:/generated:ro
+    depends_on:
+      proxy: {condition: service_healthy}
+    command: ["/tests/test_real.py"]
+
+volumes:
+  sonarr-main-config:
+  sonarr-anime-config:
+  radarr-main-config:
+  radarr-anime-config:
+  media:

@@ -1,0 +1,34 @@
+# Standalone stack for arr-proxy.
+#
+# In a typical stack you will more likely paste the `arrproxy:` service block
+# into <stack-dir>/docker-compose.yml so it shares the network with the four
+# *arr containers and can reach them by name. See README.md -> Deploying.
+
+services:
+  arrproxy:
+    build: .
+    image: arrproxy:latest
+    container_name: arrproxy
+    environment:
+      TZ: ${TZ:-UTC}
+      ARRPROXY_CONFIG: /config/config.yaml
+      # Points the container health check at the unified listener.
+      ARRPROXY_HEALTH_URL: http://127.0.0.1:8787/-/health
+      # Referenced by config.yaml; keep the real values in .env.
+      SONARR_API_KEY: ${SONARR_API_KEY}
+      SONARR_ANIME_API_KEY: ${SONARR_ANIME_API_KEY}
+      RADARR_MOVIES_API_KEY: ${RADARR_MOVIES_API_KEY}
+      RADARR_ANIME_API_KEY: ${RADARR_ANIME_API_KEY}
+      ARRPROXY_SONARR_KEY: ${ARRPROXY_SONARR_KEY}
+      ARRPROXY_RADARR_KEY: ${ARRPROXY_RADARR_KEY}
+    volumes:
+      # Writable, not :ro -- the proxy saves a generated api key back here if
+      # you left one unset.
+      - ./appdata/arrproxy:/config
+    ports:
+      # Host ports are shifted so they cannot clash with the real *arrs, which
+      # already hold 8989/7878/8990/7879 on this host.
+      - "18989:8989"   # combined Sonarr
+      - "17878:7878"   # combined Radarr
+      - "18787:8787"   # unified: /sonarr/... and /radarr/...
+    restart: unless-stopped

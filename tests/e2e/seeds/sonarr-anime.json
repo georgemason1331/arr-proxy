@@ -1,0 +1,400 @@
+{
+  "series": [
+    {
+      "id": 1,
+      "title": "Cowboy Bebop",
+      "tvdbId": 76885,
+      "year": 1998,
+      "path": "/data/media/anime/Cowboy Bebop",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "seriesType": "anime",
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/1/poster.jpg"
+        }
+      ],
+      "seasons": [
+        {
+          "seasonNumber": 1,
+          "monitored": true
+        }
+      ],
+      "statistics": {
+        "episodeCount": 2,
+        "sizeOnDisk": 321
+      },
+      "titleSlug": "cowboy-bebop"
+    },
+    {
+      "id": 2,
+      "title": "Frieren",
+      "tvdbId": 424536,
+      "year": 2023,
+      "path": "/data/media/anime/Frieren",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "seriesType": "anime",
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/2/poster.jpg"
+        }
+      ],
+      "seasons": [
+        {
+          "seasonNumber": 1,
+          "monitored": true
+        }
+      ],
+      "statistics": {
+        "episodeCount": 2,
+        "sizeOnDisk": 654
+      },
+      "titleSlug": "frieren"
+    },
+    {
+      "id": 7,
+      "title": "Ghost in the Shell SAC",
+      "tvdbId": 72233,
+      "year": 2002,
+      "path": "/data/media/anime/Ghost in the Shell SAC",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [
+        1
+      ],
+      "seriesType": "anime",
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/7/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/7/poster.jpg"
+        }
+      ],
+      "seasons": [
+        {
+          "seasonNumber": 1,
+          "monitored": true
+        }
+      ],
+      "statistics": {
+        "episodeCount": 0,
+        "sizeOnDisk": 0
+      },
+      "titleSlug": "ghost-in-the-shell-sac"
+    }
+  ],
+  "episode": [
+    {
+      "id": 11,
+      "seriesId": 1,
+      "seasonNumber": 1,
+      "episodeNumber": 1,
+      "absoluteEpisodeNumber": 1,
+      "title": "Cowboy Bebop E1",
+      "airDateUtc": "2026-09-17T01:00:00Z",
+      "hasFile": true,
+      "monitored": true,
+      "episodeFileId": 0
+    },
+    {
+      "id": 12,
+      "seriesId": 1,
+      "seasonNumber": 1,
+      "episodeNumber": 2,
+      "absoluteEpisodeNumber": 2,
+      "title": "Cowboy Bebop E2",
+      "airDateUtc": "2026-09-17T01:00:00Z",
+      "hasFile": false,
+      "monitored": true,
+      "episodeFileId": 0
+    },
+    {
+      "id": 21,
+      "seriesId": 2,
+      "seasonNumber": 1,
+      "episodeNumber": 1,
+      "absoluteEpisodeNumber": 1,
+      "title": "Frieren E1",
+      "airDateUtc": "2026-09-19T01:00:00Z",
+      "hasFile": true,
+      "monitored": true,
+      "episodeFileId": 0
+    },
+    {
+      "id": 22,
+      "seriesId": 2,
+      "seasonNumber": 1,
+      "episodeNumber": 2,
+      "absoluteEpisodeNumber": 2,
+      "title": "Frieren E2",
+      "airDateUtc": "2026-09-19T01:00:00Z",
+      "hasFile": false,
+      "monitored": true,
+      "episodeFileId": 0
+    }
+  ],
+  "calendar": [
+    {
+      "id": 12,
+      "seriesId": 1,
+      "seasonNumber": 1,
+      "episodeNumber": 2,
+      "title": "Cowboy Bebop E2",
+      "airDateUtc": "2026-09-17T01:00:00Z",
+      "hasFile": false,
+      "monitored": true,
+      "series": {
+        "id": 1,
+        "title": "Cowboy Bebop",
+        "path": "/data/media/anime/Cowboy Bebop",
+        "images": [
+          {
+            "coverType": "poster",
+            "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+            "remoteUrl": "https://images.example/1/poster.jpg"
+          }
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "seriesId": 2,
+      "seasonNumber": 1,
+      "episodeNumber": 2,
+      "title": "Frieren E2",
+      "airDateUtc": "2026-09-19T01:00:00Z",
+      "hasFile": false,
+      "monitored": true,
+      "series": {
+        "id": 2,
+        "title": "Frieren",
+        "path": "/data/media/anime/Frieren",
+        "images": [
+          {
+            "coverType": "poster",
+            "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+            "remoteUrl": "https://images.example/2/poster.jpg"
+          }
+        ]
+      }
+    }
+  ],
+  "queue": [
+    {
+      "id": 501,
+      "seriesId": 1,
+      "episodeId": 12,
+      "title": "Cowboy Bebop.S01E02.1080p",
+      "size": 1000.0,
+      "sizeleft": 100.0,
+      "status": "downloading",
+      "timeleft": "00:01:00",
+      "trackedDownloadState": "downloading",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      },
+      "downloadId": "HASH1",
+      "series": {
+        "id": 1,
+        "title": "Cowboy Bebop",
+        "path": "/data/media/anime/Cowboy Bebop"
+      },
+      "episode": {
+        "id": 12,
+        "seriesId": 1,
+        "seasonNumber": 1,
+        "episodeNumber": 2,
+        "title": "Cowboy Bebop E2"
+      }
+    },
+    {
+      "id": 502,
+      "seriesId": 2,
+      "episodeId": 22,
+      "title": "Frieren.S01E02.1080p",
+      "size": 2000.0,
+      "sizeleft": 200.0,
+      "status": "downloading",
+      "timeleft": "00:02:00",
+      "trackedDownloadState": "downloading",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      },
+      "downloadId": "HASH2",
+      "series": {
+        "id": 2,
+        "title": "Frieren",
+        "path": "/data/media/anime/Frieren"
+      },
+      "episode": {
+        "id": 22,
+        "seriesId": 2,
+        "seasonNumber": 1,
+        "episodeNumber": 2,
+        "title": "Frieren E2"
+      }
+    }
+  ],
+  "history": [
+    {
+      "id": 701,
+      "seriesId": 1,
+      "episodeId": 11,
+      "eventType": "grabbed",
+      "sourceTitle": "Cowboy Bebop.S01E01",
+      "date": "2026-09-10T01:00:00Z",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      }
+    },
+    {
+      "id": 702,
+      "seriesId": 2,
+      "episodeId": 21,
+      "eventType": "grabbed",
+      "sourceTitle": "Frieren.S01E01",
+      "date": "2026-09-11T02:00:00Z",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      }
+    }
+  ],
+  "wanted": [
+    {
+      "id": 12,
+      "seriesId": 1,
+      "seasonNumber": 1,
+      "episodeNumber": 2,
+      "title": "Cowboy Bebop E2",
+      "airDateUtc": "2026-09-17T01:00:00Z",
+      "monitored": true,
+      "hasFile": false
+    },
+    {
+      "id": 22,
+      "seriesId": 2,
+      "seasonNumber": 1,
+      "episodeNumber": 2,
+      "title": "Frieren E2",
+      "airDateUtc": "2026-09-19T01:00:00Z",
+      "monitored": true,
+      "hasFile": false
+    }
+  ],
+  "qualityprofile": [
+    {
+      "id": 1,
+      "name": "[Anime] Remux-1080p",
+      "upgradeAllowed": true,
+      "cutoff": 3,
+      "items": [
+        {
+          "id": 1000,
+          "quality": {
+            "id": 3,
+            "name": "WEBDL-1080p"
+          },
+          "allowed": true
+        }
+      ]
+    }
+  ],
+  "rootfolder": [
+    {
+      "id": 1,
+      "path": "/data/media/anime",
+      "accessible": true,
+      "freeSpace": 900
+    }
+  ],
+  "tag": [
+    {
+      "id": 1,
+      "label": "anime"
+    }
+  ],
+  "health": [
+    {
+      "source": "IndexerStatusCheck",
+      "type": "warning",
+      "message": "sonarr-anime indexer unavailable",
+      "wikiUrl": ""
+    }
+  ],
+  "diskspace": [
+    {
+      "path": "/data",
+      "label": "data",
+      "freeSpace": 500,
+      "totalSpace": 4000
+    }
+  ],
+  "command": [
+    {
+      "id": 1,
+      "name": "RefreshSeries",
+      "status": "completed"
+    }
+  ],
+  "lookup": [
+    {
+      "title": "Trigun Stampede",
+      "tvdbId": 424097,
+      "year": 2023,
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/0/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/0/poster.jpg"
+        }
+      ],
+      "seasons": [],
+      "id": 2,
+      "seriesType": "anime",
+      "titleSlug": "trigun-stampede"
+    }
+  ]
+}

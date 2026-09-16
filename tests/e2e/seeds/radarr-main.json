@@ -1,0 +1,421 @@
+{
+  "movie": [
+    {
+      "id": 1,
+      "title": "Dune",
+      "tmdbId": 438631,
+      "year": 2021,
+      "path": "/data/media/movies/Dune",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/1/poster.jpg"
+        }
+      ],
+      "hasFile": true,
+      "sizeOnDisk": 1000,
+      "titleSlug": "dune"
+    },
+    {
+      "id": 2,
+      "title": "Arrival",
+      "tmdbId": 329865,
+      "year": 2016,
+      "path": "/data/media/movies/Arrival",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/2/poster.jpg"
+        }
+      ],
+      "hasFile": true,
+      "sizeOnDisk": 2000,
+      "titleSlug": "arrival"
+    },
+    {
+      "id": 3,
+      "title": "Blade Runner 2049",
+      "tmdbId": 335984,
+      "year": 2017,
+      "path": "/data/media/movies/Blade Runner 2049",
+      "monitored": true,
+      "qualityProfileId": 2,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/3/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/3/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 0,
+      "titleSlug": "blade-runner-2049"
+    }
+  ],
+  "calendar": [
+    {
+      "id": 1,
+      "title": "Dune",
+      "tmdbId": 438631,
+      "year": 2021,
+      "path": "/data/media/movies/Dune",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/1/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 1000,
+      "inCinemas": "2026-09-16T00:00:00Z",
+      "digitalRelease": "2026-10-16T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Arrival",
+      "tmdbId": 329865,
+      "year": 2016,
+      "path": "/data/media/movies/Arrival",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/2/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 2000,
+      "inCinemas": "2026-09-18T00:00:00Z",
+      "digitalRelease": "2026-10-18T00:00:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Blade Runner 2049",
+      "tmdbId": 335984,
+      "year": 2017,
+      "path": "/data/media/movies/Blade Runner 2049",
+      "monitored": true,
+      "qualityProfileId": 2,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/3/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/3/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 0,
+      "inCinemas": "2026-09-20T00:00:00Z",
+      "digitalRelease": "2026-10-20T00:00:00Z"
+    }
+  ],
+  "queue": [
+    {
+      "id": 501,
+      "movieId": 1,
+      "title": "Dune.2026.1080p",
+      "size": 2000.0,
+      "sizeleft": 200.0,
+      "status": "downloading",
+      "timeleft": "00:01:00",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      },
+      "downloadId": "MHASH1",
+      "movie": {
+        "id": 1,
+        "title": "Dune",
+        "tmdbId": 438631,
+        "path": "/data/media/movies/Dune"
+      }
+    },
+    {
+      "id": 502,
+      "movieId": 2,
+      "title": "Arrival.2026.1080p",
+      "size": 4000.0,
+      "sizeleft": 400.0,
+      "status": "downloading",
+      "timeleft": "00:02:00",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      },
+      "downloadId": "MHASH2",
+      "movie": {
+        "id": 2,
+        "title": "Arrival",
+        "tmdbId": 329865,
+        "path": "/data/media/movies/Arrival"
+      }
+    },
+    {
+      "id": 503,
+      "movieId": 3,
+      "title": "Blade Runner 2049.2026.1080p",
+      "size": 6000.0,
+      "sizeleft": 600.0,
+      "status": "downloading",
+      "timeleft": "00:03:00",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      },
+      "downloadId": "MHASH3",
+      "movie": {
+        "id": 3,
+        "title": "Blade Runner 2049",
+        "tmdbId": 335984,
+        "path": "/data/media/movies/Blade Runner 2049"
+      }
+    }
+  ],
+  "history": [
+    {
+      "id": 701,
+      "movieId": 1,
+      "eventType": "grabbed",
+      "sourceTitle": "Dune",
+      "date": "2026-09-10T01:00:00Z",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      }
+    },
+    {
+      "id": 702,
+      "movieId": 2,
+      "eventType": "grabbed",
+      "sourceTitle": "Arrival",
+      "date": "2026-09-11T02:00:00Z",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      }
+    },
+    {
+      "id": 703,
+      "movieId": 3,
+      "eventType": "grabbed",
+      "sourceTitle": "Blade Runner 2049",
+      "date": "2026-09-12T03:00:00Z",
+      "quality": {
+        "quality": {
+          "id": 3,
+          "name": "WEBDL-1080p",
+          "source": "web"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0
+        }
+      }
+    }
+  ],
+  "wanted": [
+    {
+      "id": 1,
+      "title": "Dune",
+      "tmdbId": 438631,
+      "year": 2021,
+      "path": "/data/media/movies/Dune",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/1/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/1/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 1000
+    },
+    {
+      "id": 2,
+      "title": "Arrival",
+      "tmdbId": 329865,
+      "year": 2016,
+      "path": "/data/media/movies/Arrival",
+      "monitored": true,
+      "qualityProfileId": 1,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/2/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/2/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 2000
+    },
+    {
+      "id": 3,
+      "title": "Blade Runner 2049",
+      "tmdbId": 335984,
+      "year": 2017,
+      "path": "/data/media/movies/Blade Runner 2049",
+      "monitored": true,
+      "qualityProfileId": 2,
+      "tags": [],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/3/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/3/poster.jpg"
+        }
+      ],
+      "hasFile": false,
+      "sizeOnDisk": 0
+    }
+  ],
+  "qualityprofile": [
+    {
+      "id": 1,
+      "name": "HD Bluray + WEB",
+      "upgradeAllowed": true,
+      "cutoff": 3,
+      "items": [
+        {
+          "id": 1000,
+          "quality": {
+            "id": 3,
+            "name": "WEBDL-1080p"
+          },
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "UHD Bluray + WEB",
+      "upgradeAllowed": true,
+      "cutoff": 5,
+      "items": [
+        {
+          "id": 1001,
+          "quality": {
+            "id": 5,
+            "name": "WEBDL-2160p"
+          },
+          "allowed": true
+        }
+      ]
+    }
+  ],
+  "rootfolder": [
+    {
+      "id": 1,
+      "path": "/data/media/movies",
+      "accessible": true,
+      "freeSpace": 900
+    }
+  ],
+  "tag": [
+    {
+      "id": 1,
+      "label": "default"
+    }
+  ],
+  "health": [
+    {
+      "source": "DownloadClientCheck",
+      "type": "warning",
+      "message": "radarr-main client unavailable",
+      "wikiUrl": ""
+    }
+  ],
+  "diskspace": [
+    {
+      "path": "/data",
+      "label": "data",
+      "freeSpace": 500,
+      "totalSpace": 4000
+    }
+  ],
+  "command": [
+    {
+      "id": 1,
+      "name": "RefreshMovie",
+      "status": "completed"
+    }
+  ],
+  "collection": [
+    {
+      "id": 1,
+      "title": "radarr-main collection",
+      "tmdbId": 9000
+    }
+  ],
+  "lookup": [
+    {
+      "title": "Akira",
+      "tmdbId": 149,
+      "year": 1988,
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/0/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/0/poster.jpg"
+        }
+      ],
+      "id": 0,
+      "titleSlug": "akira"
+    }
+  ]
+}

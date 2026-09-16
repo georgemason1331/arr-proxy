@@ -1,0 +1,137 @@
+name: arrproxy-e2e
+
+# Four stand-in *arr instances plus the proxy, wired the same way the real
+# stack is: the proxy reaches the instances by container name on the bridge.
+# The mock ports are published too so the suite can read each instance's
+# request log and prove *which* one served a call.
+
+x-mock: &mock
+  image: arrproxy:e2e
+  entrypoint: ["python", "/mock/mockarr.py"]
+  restart: "no"
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+__import__('os').environ['MOCK_PORT']+'/ping',timeout=3).status==200 else 1)"]
+    interval: 3s
+    timeout: 4s
+    retries: 20
+    start_period: 2s
+
+services:
+  sonarr-main:
+    <<: *mock
+    container_name: e2e-sonarr-main
+    environment:
+      MOCK_APP: sonarr
+      MOCK_NAME: sonarr-main
+      MOCK_API_KEY: mainkey-sonarr
+      MOCK_PORT: "8989"
+      MOCK_SEED: /seed/seed.json
+    volumes:
+      - ./mockarr/mockarr.py:/mock/mockarr.py:ro
+      - ./seeds/sonarr-main.json:/seed/seed.json:ro
+    ports: ["19001:8989"]
+
+  sonarr-anime:
+    <<: *mock
+    container_name: e2e-sonarr-anime
+    environment:
+      MOCK_APP: sonarr
+      MOCK_NAME: sonarr-anime
+      MOCK_API_KEY: animekey-sonarr
+      MOCK_PORT: "8989"
+      MOCK_SEED: /seed/seed.json
+    volumes:
+      - ./mockarr/mockarr.py:/mock/mockarr.py:ro
+      - ./seeds/sonarr-anime.json:/seed/seed.json:ro
+    ports: ["19002:8989"]
+
+  radarr-main:
+    <<: *mock
+    container_name: e2e-radarr-main
+    environment:
+      MOCK_APP: radarr
+      MOCK_NAME: radarr-main
+      MOCK_API_KEY: mainkey-radarr
+      MOCK_PORT: "7878"
+      MOCK_SEED: /seed/seed.json
+    volumes:
+      - ./mockarr/mockarr.py:/mock/mockarr.py:ro
+      - ./seeds/radarr-main.json:/seed/seed.json:ro
+    ports: ["19003:7878"]
+
+  radarr-anime:
+    <<: *mock
+    container_name: e2e-radarr-anime
+    environment:
+      MOCK_APP: radarr
+      MOCK_NAME: radarr-anime
+      MOCK_API_KEY: animekey-radarr
+      MOCK_PORT: "7878"
+      MOCK_SEED: /seed/seed.json
+    volumes:
+      - ./mockarr/mockarr.py:/mock/mockarr.py:ro
+      - ./seeds/radarr-anime.json:/seed/seed.json:ro
+    ports: ["19004:7878"]
+
+  proxy:
+    image: arrproxy:e2e
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: e2e-proxy
+    restart: "no"
+    environment:
+      ARRPROXY_CONFIG: /config/config.yaml
+    volumes:
+      - ./config.e2e.yaml:/config/config.yaml:ro
+    ports:
+      - "18989:8989"   # combined Sonarr
+      - "17878:7878"   # combined Radarr
+      - "18787:8787"   # unified, path-prefixed
+    depends_on:
+      sonarr-main: {condition: service_healthy}
+      sonarr-anime: {condition: service_healthy}
+      radarr-main: {condition: service_healthy}
+      radarr-anime: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/-/health',timeout=4).status==200 else 1)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 3s
+
+  proxy-cached:
+    image: arrproxy:e2e
+    container_name: e2e-proxy-cached
+    restart: "no"
+    environment:
+      ARRPROXY_CONFIG: /config/config.yaml
+    volumes:
+      - ./config.cached.yaml:/config/config.yaml:ro
+    ports:
+      - "28989:8989"
+      - "28787:8787"
+    depends_on:
+      proxy: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/-/health',timeout=4).status==200 else 1)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 3s
+
+  tester:
+    build:
+      context: .
+      dockerfile: Dockerfile.tester
+    image: arrproxy-tester:e2e
+    container_name: e2e-tester
+    profiles: ["test"]
+    restart: "no"
+    volumes:
+      - ./test_e2e.py:/tests/test_e2e.py:ro
+      - ./test_edge_cases.py:/tests/test_edge_cases.py:ro
+    depends_on:
+      proxy: {condition: service_healthy}
+      proxy-cached: {condition: service_healthy}
+    command: ["/tests/test_e2e.py", "/tests/test_edge_cases.py"]

@@ -1,0 +1,7 @@
+# The suite runs inside the compose network so it exercises the same
+# container-to-container path the real Jellyfin plugins will use.
+FROM arrproxy:e2e
+USER root
+RUN pip install --no-cache-dir pytest==8.3.4
+WORKDIR /tests
+ENTRYPOINT ["python", "-m", "pytest", "-v", "--color=yes", "-p", "no:cacheprovider"]

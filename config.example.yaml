@@ -1,0 +1,109 @@
+# arr-proxy configuration
+#
+# Copy to <stack-dir>/appdata/arrproxy/config.yaml and fill in the four
+# instance API keys (each *arr shows its own at Settings -> General -> Security).
+#
+# ${VAR} and ${VAR:-default} are expanded from the environment, so the keys can
+# live in the stack's .env instead of this file.
+
+server:
+  host: 0.0.0.0
+
+  # One extra listener that serves both apps under /sonarr and /radarr, for
+  # clients that would rather use a single port.  Set to null to disable.
+  unified_port: 8787
+
+  log_level: info
+
+  # Fan-out responses are held this long so a Jellyfin home screen loading for
+  # several users at once does not multiply into N requests per instance.
+  # Set to 0 to disable caching entirely.
+  cache_ttl: 5
+
+  # true  -> if one instance is unreachable, serve what the others returned and
+  #          set the X-ArrProxy-Degraded response header.
+  # false -> fail the whole request instead. Use this only if a partial library
+  #          would be worse for you than an error.
+  fail_open: true
+
+  # Virtual ids are real_id + (instance_index * id_block).  Instance 0 keeps its
+  # own ids untouched.  Only raise this if an instance could ever exceed ten
+  # million rows of a single entity type.
+  id_block: 10000000
+
+  # Seerr stores the id the *real* instance assigned, so a plugin can ask for an
+  # id belonging to a non-primary instance.  When a GET for such an id 404s on
+  # the instance it decodes to, retry it against the others.  Reads only --
+  # writes are never retried against a guessed instance.
+  id_fallback_probe: true
+
+  timeout: 30
+  connect_timeout: 5
+
+  # How long one instance may hold up a fanned-out READ before it is dropped
+  # from that response (which is then marked X-ArrProxy-Degraded). An instance
+  # that is reachable but hung would otherwise stall the whole merged answer,
+  # which on a Jellyfin home screen looks like the page is broken. Writes are
+  # never cut short this way. Set to 0 to disable.
+  fanout_timeout: 10
+
+apps:
+  sonarr:
+    # The single key you give the Jellyfin plugins.  Invent any long random
+    # string; leave it out and one is generated and written back to this file.
+    api_key: ${ARRPROXY_SONARR_KEY:-change-me-to-a-long-random-string}
+    port: 8989
+    instance_name: Sonarr (combined)
+
+    instances:
+      # Order matters.  The first instance is index 0 and is identity mapped:
+      # its ids pass through untouched.  Put your largest / most-referenced
+      # instance first.
+      - name: sonarr
+        url: http://sonarr:8989
+        api_key: ${SONARR_API_KEY}
+        public_url: http://<docker-host>:8989
+        default: true          # new series land here unless a rule matches
+
+      - name: sonarr-anime
+        url: http://sonarr-anime:8989
+        api_key: ${SONARR_ANIME_API_KEY}
+        # Optional. Where a BROWSER can reach this instance's own web UI, used
+        # only for SeerrFin's "Open in Sonarr" deep links -- `url` above is a
+        # container name that a browser cannot resolve. Defaults to `url`.
+        public_url: http://<docker-host>:8990
+        routing:
+          # Only consulted for a create that carries no id from this proxy.
+          series_types: [anime]
+          root_folders: ["/data/media/anime"]
+          # title_regex: "^\\[anime\\]"
+          # genres: [Animation, Anime]
+
+  radarr:
+    api_key: ${ARRPROXY_RADARR_KEY:-change-me-to-another-long-random-string}
+    port: 7878
+    instance_name: Radarr (combined)
+
+    instances:
+      - name: radarr
+        url: http://radarr:7878
+        api_key: ${RADARR_MOVIES_API_KEY}
+        public_url: http://<docker-host>:7878
+        default: true
+
+      - name: radarr-anime
+        url: http://radarr-anime:7878
+        api_key: ${RADARR_ANIME_API_KEY}
+        public_url: http://<docker-host>:7879
+        routing:
+          root_folders: ["/data/media/anime-movies"]
+          genres: [Animation, Anime]
+
+# A third or fourth instance is just another list entry -- index 2 gets ids
+# starting at 20000000, index 3 at 30000000, and so on:
+#
+#      - name: sonarr-4k
+#        url: http://sonarr-4k:8989
+#        api_key: ${SONARR_4K_API_KEY}
+#        routing:
+#          root_folders: ["/data/media/tv-4k"]

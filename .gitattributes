@@ -1,0 +1,4 @@
+# Store and check out LF everywhere, regardless of a machine's core.autocrlf.
+# This code runs in a Linux container, where a CRLF shell script fails with
+# "bash: $'\r': command not found".
+* text=auto eol=lf
