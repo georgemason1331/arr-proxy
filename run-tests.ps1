@@ -88,6 +88,10 @@ if ($Suite -in 'real', 'all') {
     Write-Phase 'End-to-end against real Sonarr and Radarr'
     Push-Location $e2e
     try {
+        # Always start from empty volumes: the assertions depend on each instance
+        # numbering its titles from 1, which leftover state silently breaks.
+        docker compose -f docker-compose.real.yml --profile proxy --profile test `
+            down -v --remove-orphans 2>&1 | Out-Null
         docker compose -f docker-compose.real.yml up -d `
             real-sonarr-main real-sonarr-anime real-radarr-main real-radarr-anime --wait
         if ($LASTEXITCODE -ne 0) { Write-Host 'real instances failed to start' -ForegroundColor Red; exit 1 }

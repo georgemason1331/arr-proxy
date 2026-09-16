@@ -28,6 +28,24 @@ def _setup_logging(level: str) -> None:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
+def mask(secret: str) -> str:
+    """Enough of a key to tell which one is active, not enough to use it."""
+    return f"...{secret[-4:]}" if len(secret) > 8 else "(set)"
+
+
+def log_startup(routers) -> None:
+    # Never log a full API key: logs get shared, pasted into chats and shipped
+    # to aggregators, and this key grants the whole Sonarr/Radarr API.
+    for name, router in routers.items():
+        log.info(
+            "%s -> port %s, instances: %s",
+            name,
+            router.app.port,
+            ", ".join(f"{i.name}({i.url})" for i in router.app.instances),
+        )
+        log.info("%s combined api key: %s", name, mask(router.app.api_key))
+
+
 async def _serve(settings) -> int:
     upstream, routers, listeners = build(settings)
     await upstream.start()
@@ -51,14 +69,7 @@ async def _serve(settings) -> int:
     for server in servers:
         server.config.install_signal_handlers = False
 
-    for name, router in routers.items():
-        log.info(
-            "%s -> port %s, instances: %s",
-            name,
-            router.app.port,
-            ", ".join(f"{i.name}({i.url})" for i in router.app.instances),
-        )
-        log.info("%s combined api key: %s", name, router.app.api_key)
+    log_startup(routers)
     if settings.unified_port:
         log.info(
             "unified listener on port %s (%s)",

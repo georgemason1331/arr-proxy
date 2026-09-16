@@ -23,6 +23,10 @@ log = logging.getLogger("arrproxy.routing")
 # Keys a client may use to pass the API key, in header or query form.
 API_KEY_QUERY = {"apikey", "apiKey"}
 
+# A lookup term naming one exact title, e.g. "tmdb:207468" or "tvdb:423075".
+# Only these can be resolved to an owner; free text matches many titles.
+ID_TERM = re.compile(r"^(?:tmdb|tvdb|imdb)(?:id)?:\S+$", re.IGNORECASE)
+
 # Extra query parameters that carry entity ids but are not object field names.
 EXTRA_ID_QUERY_KEYS = frozenset({"ids", "id"})
 
@@ -793,23 +797,104 @@ class AppRouter:
         return self._match(path, method)[1] == "uilink"
 
     async def _h_uilink(self, *, path, plain, options, **_) -> Response:
-        """Bounce a web-UI deep link to whichever instance owns the title."""
-        target: Instance | None = None
+        """Bounce a web-UI deep link to whichever instance owns the title.
 
-        if not options.get("add"):
+        ``resolution`` records *why* a target was chosen -- ``library`` (an
+        instance holds the title), ``rule`` (a routing rule claimed it) or
+        ``default`` (nothing did).  Without it a title found on the default
+        instance and a title found nowhere redirect identically, which made a
+        misrouted link impossible to diagnose from the outside.
+        """
+        if options.get("add"):
+            target, destination_path, query, resolution = await self._resolve_add_link(plain)
+        else:
             slug = path.rstrip("/").rsplit("/", 1)[-1]
-            target = await self._instance_owning_slug(slug)
-        if target is None:
-            # An /add/new link, or a title none of the instances hold: the
-            # default instance is the best guess and still lands on a real UI.
-            target = self.app.default_instance
+            owner = await self._instance_owning_slug(slug)
+            target = owner or self.app.default_instance
+            destination_path, query = path, plain
+            resolution = "library" if owner else "default"
 
-        destination = f"{target.browser_base}{path}"
-        if plain:
-            destination += "?" + urlencode(plain)
+        destination = f"{target.browser_base}{destination_path}"
+        if query:
+            destination += "?" + urlencode(query)
+        log.info(
+            "deep link %s%s -> %s (%s)",
+            path, f"?{urlencode(plain)}" if plain else "", destination, resolution,
+        )
         response = RedirectResponse(destination, status_code=302)
         response.headers["X-ArrProxy-Instances"] = target.name
+        response.headers["X-ArrProxy-Resolution"] = resolution
         return response
+
+    async def _resolve_add_link(
+        self, plain: list[tuple[str, str]]
+    ) -> tuple[Instance, str, list[tuple[str, str]], str]:
+        """Work out where ``/add/new?term=tmdb:N`` should really go.
+
+        SeerrFin emits this link for titles that ARE in a library -- whenever a
+        monitored title has nothing downloaded yet it drops its progress entry,
+        link included, and falls back to "add new".  A lone Sonarr would just
+        show the title as already added; behind the proxy it would land on the
+        default instance, which may not have it at all.
+
+        So every instance's own lookup is asked.  Sonarr and Radarr both mark a
+        lookup result with its library id when they already hold the title, so
+        whichever instance does is the owner, and the browser is sent straight
+        to that title's page instead of an add form.
+        """
+        add_path = "/add/new"
+        term = next((v.strip() for k, v in plain if k == "term"), "")
+        if not ID_TERM.match(term):
+            # A free-text search has no single owner to find.
+            return self.app.default_instance, add_path, plain, "default"
+
+        lookup = f"{self.api_prefix}/{self.entity}/lookup"
+        replies = await asyncio.gather(
+            *(
+                self.upstream.call(
+                    self.app, inst, "GET", lookup,
+                    params=[("term", term)], deadline=self.settings.fanout_timeout,
+                )
+                for inst in self.live
+            )
+        )
+
+        metadata: dict[str, Any] | None = None
+        for reply in replies:  # configuration order, so the first owner wins
+            rows = reply.json() if reply.ok else None
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                metadata = metadata or row
+                library_id = _as_int(row.get("id"))
+                if library_id and library_id > 0:
+                    slug = await self._library_slug(reply.instance, library_id, row)
+                    if slug:
+                        return reply.instance, f"/{self.entity}/{slug}", [], "library"
+
+        if metadata is not None:
+            chosen = self.pick_for_payload(metadata)
+            resolution = "rule" if chosen is not self.app.default_instance else "default"
+            return chosen, add_path, plain, resolution
+        return self.app.default_instance, add_path, plain, "default"
+
+    async def _library_slug(self, inst: Instance, library_id: int, row: dict[str, Any]) -> str | None:
+        """The slug the owning instance's own UI routes on.
+
+        A lookup row carries the metadata server's slug; the library copy can
+        differ (the *arrs de-duplicate colliding slugs), so prefer the stored
+        record and fall back to the lookup row only if that read fails.
+        """
+        reply = await self.upstream.call(
+            self.app, inst, "GET", f"{self.api_prefix}/{self.entity}/{library_id}",
+            deadline=self.settings.fanout_timeout,
+        )
+        stored = reply.json() if reply.ok else None
+        if isinstance(stored, dict) and stored.get("titleSlug"):
+            return str(stored["titleSlug"])
+        return str(row["titleSlug"]) if row.get("titleSlug") else None
 
     async def _instance_owning_slug(self, slug: str) -> Instance | None:
         if not slug:

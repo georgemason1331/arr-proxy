@@ -41,6 +41,11 @@ fi
 if [[ "$SUITE" == "real" || "$SUITE" == "all" ]]; then
   phase "End-to-end against real Sonarr and Radarr"
   cd "$E2E"
+  # Always start from empty volumes: the assertions depend on each instance
+  # numbering its titles from 1, which leftover state from an interrupted run
+  # or a manual experiment silently breaks.
+  docker compose -f docker-compose.real.yml --profile proxy --profile test \
+    down -v --remove-orphans >/dev/null 2>&1
   docker compose -f docker-compose.real.yml up -d --wait \
     real-sonarr-main real-sonarr-anime real-radarr-main real-radarr-anime || exit 1
   # Root folders must exist and be writable before the *arrs will accept them.

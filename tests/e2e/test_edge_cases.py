@@ -289,11 +289,67 @@ class TestBrowserDeepLinks:
         assert response.headers["X-ArrProxy-Instances"] == "radarr-anime"
 
     def test_add_new_link_goes_to_the_default_instance(self) -> None:
+        """A title no instance has, and no rule claims, keeps the add form."""
         response = httpx.get(f"{SONARR}/add/new", params={"term": "tmdb:1234"},
                              follow_redirects=False, timeout=30)
         assert response.status_code == 302
         location = response.headers["location"]
         assert "sonarr-main" in location and "term=tmdb%3A1234" in location
+        assert response.headers["X-ArrProxy-Resolution"] == "default"
+
+    # SeerrFin emits /add/new?term=tmdb:N even for titles already in a library:
+    # it drops a monitored title's progress entry (and its link) while nothing
+    # is downloaded yet.  Sending those to the default instance put the user on
+    # an add form in an instance that did not have the show at all.
+    def test_add_new_for_a_title_already_on_the_anime_instance(self) -> None:
+        response = httpx.get(f"{SONARR}/add/new", params={"term": "tmdb:30991"},
+                             follow_redirects=False, timeout=30)
+        assert response.status_code == 302
+        assert response.headers["X-ArrProxy-Instances"] == "sonarr-anime"
+        assert response.headers["X-ArrProxy-Resolution"] == "library"
+        location = response.headers["location"]
+        assert location.endswith("/series/cowboy-bebop"), "open the show, not an add form"
+        assert "term=" not in location
+
+    def test_add_new_by_tvdb_id(self) -> None:
+        response = httpx.get(f"{SONARR}/add/new", params={"term": "tvdb:424536"},
+                             follow_redirects=False, timeout=30)
+        assert response.headers["X-ArrProxy-Instances"] == "sonarr-anime"
+        assert response.headers["location"].endswith("/series/frieren")
+
+    def test_add_new_for_a_title_on_the_main_instance(self) -> None:
+        response = httpx.get(f"{SONARR}/add/new", params={"term": "tmdb:1396"},
+                             follow_redirects=False, timeout=30)
+        assert response.headers["X-ArrProxy-Instances"] == "sonarr-main"
+        assert response.headers["X-ArrProxy-Resolution"] == "library"
+        assert response.headers["location"].endswith("/series/breaking-bad")
+
+    def test_add_new_movie_already_on_the_anime_instance(self) -> None:
+        response = httpx.get(f"{RADARR}/add/new", params={"term": "tmdb:372058"},
+                             follow_redirects=False, timeout=30)
+        assert response.headers["X-ArrProxy-Instances"] == "radarr-anime"
+        assert response.headers["X-ArrProxy-Resolution"] == "library"
+        assert response.headers["location"].endswith("/movie/your-name")
+
+    def test_add_new_for_an_unowned_title_follows_routing_rules(self) -> None:
+        """Nobody has Perfect Blue yet; radarr-anime's Animation rule claims it."""
+        response = httpx.get(f"{RADARR}/add/new", params={"term": "tmdb:10494"},
+                             follow_redirects=False, timeout=30)
+        assert response.headers["X-ArrProxy-Instances"] == "radarr-anime"
+        assert response.headers["X-ArrProxy-Resolution"] == "rule"
+        assert "/add/new?term=tmdb%3A10494" in response.headers["location"]
+
+    def test_add_new_with_free_text_is_not_guessed(self) -> None:
+        response = httpx.get(f"{SONARR}/add/new", params={"term": "cowboy"},
+                             follow_redirects=False, timeout=30)
+        assert response.headers["X-ArrProxy-Instances"] == "sonarr-main"
+        assert response.headers["X-ArrProxy-Resolution"] == "default"
+
+    def test_slug_links_report_how_they_resolved(self) -> None:
+        found = httpx.get(f"{SONARR}/series/cowboy-bebop", follow_redirects=False, timeout=30)
+        missing = httpx.get(f"{SONARR}/series/no-such-show", follow_redirects=False, timeout=30)
+        assert found.headers["X-ArrProxy-Resolution"] == "library"
+        assert missing.headers["X-ArrProxy-Resolution"] == "default"
 
     def test_unknown_title_falls_back_to_the_default_instance(self) -> None:
         response = httpx.get(f"{SONARR}/series/nothing-here",

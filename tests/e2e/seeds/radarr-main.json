@@ -416,6 +416,24 @@
       ],
       "id": 0,
       "titleSlug": "akira"
+    },
+    {
+      "title": "Perfect Blue",
+      "tmdbId": 10494,
+      "year": 1997,
+      "genres": [
+        "Animation",
+        "Thriller"
+      ],
+      "images": [
+        {
+          "coverType": "poster",
+          "url": "/MediaCover/0/poster.jpg?lastWrite=638",
+          "remoteUrl": "https://images.example/0/poster.jpg"
+        }
+      ],
+      "id": 0,
+      "titleSlug": "perfect-blue"
     }
   ]
 }

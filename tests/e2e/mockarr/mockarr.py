@@ -205,7 +205,22 @@ async def _dispatch(request: Request) -> Response:
 
     # ---- lookup ----------------------------------------------------------
     if tail == f"/{ENTITY}/lookup":
-        term = (request.query_params.get("term") or "").lower()
+        raw_term = (request.query_params.get("term") or "").strip()
+        kind, sep, value = raw_term.partition(":")
+        field = {"tmdb": "tmdbId", "tvdb": "tvdbId", "imdb": "imdbId"}.get(
+            kind.lower().removesuffix("id")
+        )
+        if sep and field and value:
+            # Like the real apps: an exact id lookup returns the library record
+            # (carrying its id) when this instance holds the title, and bare
+            # metadata with id 0 when it does not.
+            owned = [r for r in _rows(ENTITY) if str(r.get(field)) == value]
+            if owned:
+                return JSONResponse(owned)
+            return JSONResponse(
+                [dict(r, id=0) for r in _rows("lookup") if str(r.get(field)) == value]
+            )
+        term = raw_term.lower()
         hits = [r for r in _rows("lookup") if term in str(r.get("title", "")).lower()]
         return JSONResponse(hits)
 

@@ -394,6 +394,34 @@ class TestRealBrowserDeepLinks:
         assert response.status_code == 302
         assert served_by(response) == ["radarr-anime"]
 
+    def test_add_new_for_an_added_show_opens_it_on_the_owning_instance(self, sonarr) -> None:
+        """SeerrFin's fallback link for a title that is already in a library.
+
+        Real Sonarr resolves the TMDB id and marks the result with its library
+        id; the proxy must follow that to the anime instance's show page.
+        """
+        slug = {r["tvdbId"]: r for r in sonarr.get("/api/v3/series").json()}[76885]["titleSlug"]
+        hop = httpx.get(f"{SONARR}/add/new", params={"term": "tmdb:30991"},
+                        follow_redirects=False, timeout=60)
+        assert hop.status_code == 302
+        assert served_by(hop) == ["sonarr-anime"]
+        assert hop.headers["X-ArrProxy-Resolution"] == "library"
+        assert hop.headers["location"].endswith(f"/series/{slug}")
+        assert httpx.get(hop.headers["location"], timeout=30).status_code == 200
+
+    def test_add_new_for_a_show_on_the_main_instance(self) -> None:
+        hop = httpx.get(f"{SONARR}/add/new", params={"term": "tmdb:1396"},
+                        follow_redirects=False, timeout=60)
+        assert served_by(hop) == ["sonarr-main"]
+        assert hop.headers["X-ArrProxy-Resolution"] == "library"
+
+    def test_add_new_for_an_added_movie(self, radarr) -> None:
+        slug = {r["tmdbId"]: r for r in radarr.get("/api/v3/movie").json()}[372058]["titleSlug"]
+        hop = httpx.get(f"{RADARR}/add/new", params={"term": "tmdb:372058"},
+                        follow_redirects=False, timeout=60)
+        assert served_by(hop) == ["radarr-anime"]
+        assert hop.headers["location"].endswith(f"/movie/{slug}")
+
     def test_add_new_link_lands_on_a_real_instance(self) -> None:
         hop = httpx.get(f"{SONARR}/add/new", params={"term": "tmdb:1234"},
                         follow_redirects=False, timeout=30)

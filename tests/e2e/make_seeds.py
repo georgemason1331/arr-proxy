@@ -171,17 +171,17 @@ def build() -> dict[str, dict]:
     sonarr_main = sonarr_seed(
         "sonarr-main",
         [
-            {"id": 1, "title": "Breaking Bad", "tvdbId": 81189, "year": 2008,
+            {"id": 1, "title": "Breaking Bad", "tvdbId": 81189, "tmdbId": 1396, "year": 2008,
              "path": "/data/media/tv/Breaking Bad", "monitored": True,
              "qualityProfileId": 1, "tags": [1], "seriesType": "standard",
              "images": cover(1), "seasons": [{"seasonNumber": 1, "monitored": True}],
              "statistics": {"episodeCount": 2, "sizeOnDisk": 123}},
-            {"id": 2, "title": "The Office", "tvdbId": 73244, "year": 2005,
+            {"id": 2, "title": "The Office", "tvdbId": 73244, "tmdbId": 2316, "year": 2005,
              "path": "/data/media/tv/The Office", "monitored": True,
              "qualityProfileId": 1, "tags": [], "seriesType": "standard",
              "images": cover(2), "seasons": [{"seasonNumber": 1, "monitored": True}],
              "statistics": {"episodeCount": 2, "sizeOnDisk": 456}},
-            {"id": 3, "title": "Severance", "tvdbId": 371980, "year": 2022,
+            {"id": 3, "title": "Severance", "tvdbId": 371980, "tmdbId": 95396, "year": 2022,
              "path": "/data/media/tv/Severance", "monitored": True,
              "qualityProfileId": 2, "tags": [], "seriesType": "standard",
              "images": cover(3), "seasons": [{"seasonNumber": 1, "monitored": True}],
@@ -192,12 +192,12 @@ def build() -> dict[str, dict]:
     sonarr_anime = sonarr_seed(
         "sonarr-anime",
         [
-            {"id": 1, "title": "Cowboy Bebop", "tvdbId": 76885, "year": 1998,
+            {"id": 1, "title": "Cowboy Bebop", "tvdbId": 76885, "tmdbId": 30991, "year": 1998,
              "path": "/data/media/anime/Cowboy Bebop", "monitored": True,
              "qualityProfileId": 1, "tags": [1], "seriesType": "anime",
              "images": cover(1), "seasons": [{"seasonNumber": 1, "monitored": True}],
              "statistics": {"episodeCount": 2, "sizeOnDisk": 321}},
-            {"id": 2, "title": "Frieren", "tvdbId": 424536, "year": 2023,
+            {"id": 2, "title": "Frieren", "tvdbId": 424536, "tmdbId": 209867, "year": 2023,
              "path": "/data/media/anime/Frieren", "monitored": True,
              "qualityProfileId": 1, "tags": [1], "seriesType": "anime",
              "images": cover(2), "seasons": [{"seasonNumber": 1, "monitored": True}],
@@ -211,7 +211,7 @@ def build() -> dict[str, dict]:
     # anime library even though it decodes to the identity-mapped primary --
     # this row is what the read-only fallback probe has to find.
     sonarr_anime["series"].append({
-        "id": 7, "title": "Ghost in the Shell SAC", "tvdbId": 72233, "year": 2002,
+        "id": 7, "title": "Ghost in the Shell SAC", "tvdbId": 72233, "tmdbId": 45247, "year": 2002,
         "path": "/data/media/anime/Ghost in the Shell SAC", "monitored": True,
         "qualityProfileId": 1, "tags": [1], "seriesType": "anime",
         "images": cover(7), "seasons": [{"seasonNumber": 1, "monitored": True}],
@@ -263,8 +263,10 @@ def build() -> dict[str, dict]:
     )
     shared_movie = {"title": "Akira", "tmdbId": 149, "year": 1988,
                     "images": cover(0)}
-    radarr_main["lookup"] = [{**shared_movie, "id": 0}]
-    radarr_anime["lookup"] = [{**shared_movie, "id": 2}]
+    unowned_animation = {"title": "Perfect Blue", "tmdbId": 10494, "year": 1997,
+                         "genres": ["Animation", "Thriller"], "images": cover(0)}
+    radarr_main["lookup"] = [{**shared_movie, "id": 0}, dict(unowned_animation, id=0)]
+    radarr_anime["lookup"] = [{**shared_movie, "id": 2}, dict(unowned_animation, id=0)]
 
     return {
         "sonarr-main": sonarr_main,

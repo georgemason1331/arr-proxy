@@ -85,7 +85,8 @@ ARRPROXY_RADARR_KEY=<a different long random string>
 ```
 
 `openssl rand -hex 24` produces a suitable one. If you leave them out, the proxy
-generates keys on first start, writes them into `config.yaml`, and logs them.
+generates keys on first start and writes them into `config.yaml` — read them
+from there; the log only shows the last four characters.
 
 **2. Add the service** to `<stack-dir>/docker-compose.yml` so it shares the
 network with the *arr containers and can reach them by name:
@@ -200,14 +201,23 @@ be reached.
 
 ### "Open in Sonarr" buttons
 
-SeerrFin renders buttons that link into the *arr web UI — `{base}/series/{titleSlug}`
-for something already in the library, `{base}/add/new?term=tmdb:N` for something
-that is not. Point it at the proxy and those would 404, because the proxy serves
-no web UI.
+SeerrFin renders buttons that link into the *arr web UI: `{base}/series/{titleSlug}`
+when it has matched the title to your library, and `{base}/add/new?term=tmdb:N`
+when it hasn't. Point it at the proxy and those would 404, because the proxy
+serves no web UI.
 
 So the proxy answers those three non-API paths with a **302** to whichever
 instance actually owns the title. Set `public_url` on each instance for it to
 work: `url` is a container name the browser cannot resolve.
+
+`/add/new` links need care. SeerrFin produces them for titles that **are** in a
+library too — it drops a monitored title's progress entry, link included, while
+nothing is downloaded yet. So rather than send every add link to the default
+instance, the proxy asks each instance's own lookup for that id. Sonarr and
+Radarr mark a result with its library id when they already hold the title, and
+the browser goes straight to that title's page on that instance. A title nobody
+holds keeps its add form, on whichever instance your routing rules claim it for,
+or the default.
 
 ```yaml
       - name: sonarr-anime
@@ -217,8 +227,11 @@ work: `url` is a container name the browser cannot resolve.
 
 These paths are **unauthenticated** — a browser following a button has no API
 key to present. They only issue a redirect to an instance the viewer can already
-reach, and the API itself stays behind the key. `/add/new` goes to the default
-instance, since a title that is not in any library has nothing to route on.
+reach, and the API itself stays behind the key.
+
+Every redirect records why it went where it did, in an
+`X-ArrProxy-Resolution` header and in the log: `library` (an instance holds the
+title), `rule` (a routing rule claimed it) or `default` (nothing did).
 
 ### Where a newly added title goes
 
@@ -323,9 +336,9 @@ Three layers, all run in containers so nothing needs installing on the host:
 
 | Suite | What it proves |
 |---|---|
-| **unit** (107 tests) | Id translation, merge strategies, config validation, the route table, and instance selection, in isolation |
-| **mock end-to-end** (93 tests + 17 failure-mode checks) | The proxy over real HTTP against four scripted instances with deliberately colliding ids. Each mock records the requests it receives, so routing is asserted by *which instance was contacted*, not inferred from the body |
-| **real end-to-end** (38 tests) | The same proxy against four genuine `linuxserver/sonarr` and `linuxserver/radarr` containers, with real titles fetched from the live metadata servers |
+| **unit** (122 tests) | Id translation, merge strategies, config validation, the route table, and instance selection, in isolation |
+| **mock end-to-end** (100 tests + 17 failure-mode checks) | The proxy over real HTTP against four scripted instances with deliberately colliding ids. Each mock records the requests it receives, so routing is asserted by *which instance was contacted*, not inferred from the body |
+| **real end-to-end** (41 tests) | The same proxy against four genuine `linuxserver/sonarr` and `linuxserver/radarr` containers, with real titles fetched from the live metadata servers |
 
 The real suite is the one that matters most. Four fresh instances each number
 their series, tags and quality profiles from 1, so every id collides — the exact
@@ -379,6 +392,7 @@ curl -s -H "X-Api-Key: $KEY" http://<docker-host>:18989/api/v3/series/10000001 |
 | Ids look wrong after a config change | Instances were reordered; index 0 must stay index 0 |
 | An endpoint returns 404 through the proxy | Every instance returned 404 — the path really is absent, not a proxy fault |
 | "Open in Sonarr" lands on a dead page | Set `public_url` on each instance to a browser-reachable address |
+| "Open in Sonarr" lands on the wrong instance | `docker compose logs arrproxy \| grep "deep link"` shows each click and why it resolved as it did; `default` means no instance reported owning that title |
 | One instance's data is intermittently missing | It is exceeding `fanout_timeout`; check that instance's own responsiveness |
 | Log says an id is `>= id_block` | Raise `server.id_block` above the id it names and restart |
 

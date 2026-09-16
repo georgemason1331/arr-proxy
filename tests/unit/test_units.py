@@ -654,3 +654,101 @@ class TestUnknownOwnerHelper:
     def test_an_unknown_instance_index_yields_no_targets(self, router) -> None:
         _, ids = router.split_query(f"seriesId={9 * BLOCK + 1}")
         assert router._targets_from_ids(ids) == []
+
+
+class TestSecretsStayOutOfLogs:
+    def test_startup_log_never_contains_the_full_key(self, tmp_path, caplog) -> None:
+        from arrproxy.__main__ import log_startup
+
+        key = "example-combined-key-for-tests-0000"
+        settings = cfg.load(write(tmp_path, BASE_CONFIG.format(key=key)))
+        routers = {"sonarr": AppRouter(settings, settings.apps["sonarr"], upstream=None)}  # type: ignore[arg-type]
+        with caplog.at_level("INFO"):
+            log_startup(routers)
+        text = "\n".join(r.getMessage() for r in caplog.records)
+        assert key not in text
+        assert "...0000" in text, "the tail is still shown so you can tell which key is live"
+
+    def test_short_keys_are_not_partially_revealed(self) -> None:
+        from arrproxy.__main__ import mask
+
+        assert mask("abcdefgh") == "(set)"
+
+
+class StubUpstream:
+    """Answers lookups from a fixed table and records every call made."""
+
+    def __init__(self, lookups: dict[str, list], records: dict[tuple[str, int], dict] | None = None):
+        self.lookups = lookups
+        self.records = records or {}
+        self.calls: list[tuple[str, str]] = []
+
+    async def call(self, app, inst, method, path, params=None, **_):
+        self.calls.append((inst.name, path))
+        if path.endswith("/lookup"):
+            payload = self.lookups.get(inst.name, [])
+        else:
+            record = self.records.get((inst.name, int(path.rsplit("/", 1)[-1])))
+            if record is None:
+                return Reply(instance=inst, status=404, headers={"content-type": "application/json"},
+                             body=b'{"message":"NotFound"}')
+            payload = record
+        return Reply(instance=inst, status=200, headers={"content-type": "application/json"},
+                     body=json.dumps(payload).encode())
+
+
+class TestAddLinkResolution:
+    """/add/new?term=... from SeerrFin, for titles that may already be owned."""
+
+    def resolve(self, tmp_path, upstream, term):
+        import asyncio
+
+        settings = cfg.load(write(tmp_path, BASE_CONFIG.format(key="k" * 12)))
+        router = AppRouter(settings, settings.apps["sonarr"], upstream)
+        return asyncio.run(router._resolve_add_link([("term", term)]))
+
+    @pytest.mark.parametrize("term", ["tmdb:207468", "TVDB:423075", "imdb:tt123", "tmdbid:5"])
+    def test_exact_id_terms_are_recognised(self, term) -> None:
+        from arrproxy.routing import ID_TERM
+
+        assert ID_TERM.match(term)
+
+    @pytest.mark.parametrize("term", ["kaiju no 8", "tmdb:", "", "tmdb 207468"])
+    def test_free_text_is_not_an_id_term(self, term) -> None:
+        from arrproxy.routing import ID_TERM
+
+        assert not ID_TERM.match(term)
+
+    def test_owner_is_the_instance_whose_lookup_carries_a_library_id(self, tmp_path) -> None:
+        upstream = StubUpstream(
+            lookups={"main": [{"title": "Kaiju No. 8", "id": 0, "titleSlug": "kaiju-no-8"}],
+                     "anime": [{"title": "Kaiju No. 8", "id": 37, "titleSlug": "kaiju-no-8"}]},
+            records={("anime", 37): {"id": 37, "titleSlug": "kaiju-no-8-2024"}},
+        )
+        inst, path, query, how = self.resolve(tmp_path, upstream, "tmdb:207468")
+        assert inst.name == "anime" and how == "library"
+        assert path == "/series/kaiju-no-8-2024", "the stored slug wins over the lookup's"
+        assert query == []
+
+    def test_lookup_slug_is_used_if_the_stored_record_cannot_be_read(self, tmp_path) -> None:
+        upstream = StubUpstream(lookups={"anime": [{"id": 37, "titleSlug": "kaiju-no-8"}]})
+        inst, path, _, how = self.resolve(tmp_path, upstream, "tmdb:207468")
+        assert (inst.name, path, how) == ("anime", "/series/kaiju-no-8", "library")
+
+    def test_unowned_title_follows_a_routing_rule(self, tmp_path) -> None:
+        upstream = StubUpstream(lookups={"main": [{"id": 0, "seriesType": "anime"}],
+                                         "anime": [{"id": 0, "seriesType": "anime"}]})
+        inst, path, query, how = self.resolve(tmp_path, upstream, "tmdb:1")
+        assert (inst.name, path, how) == ("anime", "/add/new", "rule")
+        assert query == [("term", "tmdb:1")], "the add form keeps its search term"
+
+    def test_unowned_unclaimed_title_goes_to_the_default(self, tmp_path) -> None:
+        upstream = StubUpstream(lookups={"main": [{"id": 0}], "anime": [{"id": 0}]})
+        inst, _, _, how = self.resolve(tmp_path, upstream, "tmdb:1")
+        assert (inst.name, how) == ("main", "default")
+
+    def test_free_text_never_queries_the_instances(self, tmp_path) -> None:
+        upstream = StubUpstream(lookups={})
+        inst, _, _, how = self.resolve(tmp_path, upstream, "kaiju no 8")
+        assert (inst.name, how) == ("main", "default")
+        assert upstream.calls == []

@@ -39,3 +39,4 @@ apps:
         api_key: animekey-radarr
         routing:
           root_folders: ["/data/media/anime-movies"]
+          genres: [Animation]
