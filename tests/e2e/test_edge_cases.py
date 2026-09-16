@@ -38,7 +38,16 @@ def reset_logs() -> None:
 
 
 def log_of(name: str) -> list[dict]:
-    return httpx.get(f"{MOCKS[name]}/__mock/requests", timeout=10.0).json()
+    """Requests an instance received, minus the proxy's background health probe.
+
+    Each proxy container's health check hits every instance's system/status
+    every few seconds.  Left in, a probe that lands between reset_logs() and
+    this call makes "the instance received nothing" assertions fail at random.
+    """
+    return [
+        entry for entry in httpx.get(f"{MOCKS[name]}/__mock/requests", timeout=10.0).json()
+        if not (entry["method"] == "GET" and entry["path"] == "/api/v3/system/status")
+    ]
 
 
 @pytest.fixture()
@@ -302,6 +311,7 @@ class TestBrowserDeepLinks:
     # is downloaded yet.  Sending those to the default instance put the user on
     # an add form in an instance that did not have the show at all.
     def test_add_new_for_a_title_already_on_the_anime_instance(self) -> None:
+        reset_logs()
         response = httpx.get(f"{SONARR}/add/new", params={"term": "tmdb:30991"},
                              follow_redirects=False, timeout=30)
         assert response.status_code == 302
@@ -310,6 +320,17 @@ class TestBrowserDeepLinks:
         location = response.headers["location"]
         assert location.endswith("/series/cowboy-bebop"), "open the show, not an add form"
         assert "term=" not in location
+        # Owned titles are found in the libraries themselves.  A metadata lookup
+        # is a round trip to the internet (~4s cold) and must not be needed.
+        for name in ("sonarr-main", "sonarr-anime"):
+            assert not [e for e in log_of(name) if e["path"].endswith("/lookup")], name
+
+    def test_add_new_for_an_unowned_title_does_consult_the_lookup(self) -> None:
+        """The slow path still exists for titles nobody holds: rules need metadata."""
+        reset_logs()
+        httpx.get(f"{RADARR}/add/new", params={"term": "tmdb:10494"},
+                  follow_redirects=False, timeout=30)
+        assert any(e["path"].endswith("/lookup") for e in log_of("radarr-anime"))
 
     def test_add_new_by_tvdb_id(self) -> None:
         response = httpx.get(f"{SONARR}/add/new", params={"term": "tvdb:424536"},

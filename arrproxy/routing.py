@@ -26,6 +26,7 @@ API_KEY_QUERY = {"apikey", "apiKey"}
 # A lookup term naming one exact title, e.g. "tmdb:207468" or "tvdb:423075".
 # Only these can be resolved to an owner; free text matches many titles.
 ID_TERM = re.compile(r"^(?:tmdb|tvdb|imdb)(?:id)?:\S+$", re.IGNORECASE)
+EXTERNAL_ID_FIELDS = {"tmdb": "tmdbId", "tvdb": "tvdbId", "imdb": "imdbId"}
 
 # Extra query parameters that carry entity ids but are not object field names.
 EXTRA_ID_QUERY_KEYS = frozenset({"ids", "id"})
@@ -837,16 +838,33 @@ class AppRouter:
         show the title as already added; behind the proxy it would land on the
         default instance, which may not have it at all.
 
-        So every instance's own lookup is asked.  Sonarr and Radarr both mark a
-        lookup result with its library id when they already hold the title, so
-        whichever instance does is the owner, and the browser is sent straight
-        to that title's page instead of an add form.
+        Two passes, cheapest first:
+
+        1. The libraries themselves.  The title's id is matched against every
+           instance's own listing -- a LAN read measured at ~10ms for both.
+        2. Only if no library lists that id: each instance's metadata lookup.
+           That is a round trip to the metadata server (~4s the first time a
+           title is looked up), but it still finds owned titles whose stored id
+           is stale -- Sonarr marks a lookup result with its library id when it
+           holds the show -- and supplies genres for routing rules otherwise.
         """
         add_path = "/add/new"
         term = next((v.strip() for k, v in plain if k == "term"), "")
         if not ID_TERM.match(term):
             # A free-text search has no single owner to find.
             return self.app.default_instance, add_path, plain, "default"
+
+        kind, _, value = term.partition(":")
+        field = EXTERNAL_ID_FIELDS[kind.lower().removesuffix("id")]
+        if field != "imdbId" and (_as_int(value) or 0) <= 0:
+            # "tmdb:0" would otherwise match every title that lacks the id.
+            return self.app.default_instance, add_path, plain, "default"
+
+        listings = await self._library_listings()
+        owned = self._find_owned(listings, lambda row: str(row.get(field)) == value)
+        if owned:
+            inst, row = owned
+            return inst, f"/{self.entity}/{row['titleSlug']}", [], "library"
 
         lookup = f"{self.api_prefix}/{self.entity}/lookup"
         replies = await asyncio.gather(
@@ -859,6 +877,18 @@ class AppRouter:
             )
         )
 
+        # The stored slug is what the owner's UI routes on; a lookup row carries
+        # the metadata server's, which can differ when the *arr de-duplicated it.
+        stored_slugs: dict[str, dict[int, str]] = {}
+        for listing in listings:
+            rows = listing.json() if listing.ok else None
+            stored_slugs[listing.instance.name] = {
+                row_id: str(row["titleSlug"])
+                for row in (rows if isinstance(rows, list) else [])
+                if isinstance(row, dict) and row.get("titleSlug")
+                and (row_id := _as_int(row.get("id")))
+            }
+
         metadata: dict[str, Any] | None = None
         for reply in replies:  # configuration order, so the first owner wins
             rows = reply.json() if reply.ok else None
@@ -870,7 +900,7 @@ class AppRouter:
                 metadata = metadata or row
                 library_id = _as_int(row.get("id"))
                 if library_id and library_id > 0:
-                    slug = await self._library_slug(reply.instance, library_id, row)
+                    slug = stored_slugs.get(reply.instance.name, {}).get(library_id) or row.get("titleSlug")
                     if slug:
                         return reply.instance, f"/{self.entity}/{slug}", [], "library"
 
@@ -880,36 +910,39 @@ class AppRouter:
             return chosen, add_path, plain, resolution
         return self.app.default_instance, add_path, plain, "default"
 
-    async def _library_slug(self, inst: Instance, library_id: int, row: dict[str, Any]) -> str | None:
-        """The slug the owning instance's own UI routes on.
-
-        A lookup row carries the metadata server's slug; the library copy can
-        differ (the *arrs de-duplicate colliding slugs), so prefer the stored
-        record and fall back to the lookup row only if that read fails.
-        """
-        reply = await self.upstream.call(
-            self.app, inst, "GET", f"{self.api_prefix}/{self.entity}/{library_id}",
-            deadline=self.settings.fanout_timeout,
+    async def _library_listings(self) -> list[Reply]:
+        """Every live instance's full library, fetched in parallel."""
+        listing = f"{self.api_prefix}/{self.entity}"
+        return list(
+            await asyncio.gather(
+                *(
+                    self.upstream.call(
+                        self.app, inst, "GET", listing, deadline=self.settings.fanout_timeout
+                    )
+                    for inst in self.live
+                )
+            )
         )
-        stored = reply.json() if reply.ok else None
-        if isinstance(stored, dict) and stored.get("titleSlug"):
-            return str(stored["titleSlug"])
-        return str(row["titleSlug"]) if row.get("titleSlug") else None
+
+    @staticmethod
+    def _find_owned(listings: list[Reply], matches) -> tuple[Instance, dict[str, Any]] | None:
+        """First library row, in configuration order, that matches and can be linked to."""
+        for reply in listings:
+            rows = reply.json() if reply.ok else None
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if isinstance(row, dict) and row.get("titleSlug") and matches(row):
+                    return reply.instance, row
+        return None
 
     async def _instance_owning_slug(self, slug: str) -> Instance | None:
         if not slug:
             return None
-        listing = f"{self.api_prefix}/{self.entity}"
-        for inst in self.live:
-            reply = await self.upstream.call(self.app, inst, "GET", listing)
-            if not reply.ok:
-                continue
-            rows = reply.json()
-            if isinstance(rows, list) and any(
-                isinstance(r, dict) and r.get("titleSlug") == slug for r in rows
-            ):
-                return inst
-        return None
+        owned = self._find_owned(
+            await self._library_listings(), lambda row: row.get("titleSlug") == slug
+        )
+        return owned[0] if owned else None
 
     async def _h_mediacover(self, *, method, path, plain, ids, headers, path_id, **_):
         """Serve a poster/banner from whichever instance owns the entity."""

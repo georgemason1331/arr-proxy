@@ -676,25 +676,32 @@ class TestSecretsStayOutOfLogs:
 
 
 class StubUpstream:
-    """Answers lookups from a fixed table and records every call made."""
+    """Serves library listings and metadata lookups from fixed tables.
 
-    def __init__(self, lookups: dict[str, list], records: dict[tuple[str, int], dict] | None = None):
-        self.lookups = lookups
-        self.records = records or {}
+    Every call is recorded, so a test can assert which requests were *not*
+    made -- the fast path's whole point is skipping the metadata lookup.
+    """
+
+    def __init__(self, lookups: dict[str, list] | None = None,
+                 libraries: dict[str, list] | None = None):
+        self.lookups = lookups or {}
+        self.libraries = libraries or {}
         self.calls: list[tuple[str, str]] = []
 
     async def call(self, app, inst, method, path, params=None, **_):
         self.calls.append((inst.name, path))
         if path.endswith("/lookup"):
             payload = self.lookups.get(inst.name, [])
+        elif path == "/api/v3/series":
+            payload = self.libraries.get(inst.name, [])
         else:
-            record = self.records.get((inst.name, int(path.rsplit("/", 1)[-1])))
-            if record is None:
-                return Reply(instance=inst, status=404, headers={"content-type": "application/json"},
-                             body=b'{"message":"NotFound"}')
-            payload = record
+            return Reply(instance=inst, status=404, headers={"content-type": "application/json"},
+                         body=b'{"message":"NotFound"}')
         return Reply(instance=inst, status=200, headers={"content-type": "application/json"},
                      body=json.dumps(payload).encode())
+
+    def looked_up(self) -> bool:
+        return any(path.endswith("/lookup") for _, path in self.calls)
 
 
 class TestAddLinkResolution:
@@ -723,17 +730,48 @@ class TestAddLinkResolution:
         upstream = StubUpstream(
             lookups={"main": [{"title": "Kaiju No. 8", "id": 0, "titleSlug": "kaiju-no-8"}],
                      "anime": [{"title": "Kaiju No. 8", "id": 37, "titleSlug": "kaiju-no-8"}]},
-            records={("anime", 37): {"id": 37, "titleSlug": "kaiju-no-8-2024"}},
         )
         inst, path, query, how = self.resolve(tmp_path, upstream, "tmdb:207468")
-        assert inst.name == "anime" and how == "library"
-        assert path == "/series/kaiju-no-8-2024", "the stored slug wins over the lookup's"
+        assert (inst.name, path, how) == ("anime", "/series/kaiju-no-8", "library")
         assert query == []
 
-    def test_lookup_slug_is_used_if_the_stored_record_cannot_be_read(self, tmp_path) -> None:
+    def test_lookup_slug_is_used_if_the_library_row_is_missing(self, tmp_path) -> None:
         upstream = StubUpstream(lookups={"anime": [{"id": 37, "titleSlug": "kaiju-no-8"}]})
         inst, path, _, how = self.resolve(tmp_path, upstream, "tmdb:207468")
         assert (inst.name, path, how) == ("anime", "/series/kaiju-no-8", "library")
+
+    def test_owned_title_is_found_without_a_metadata_lookup(self, tmp_path) -> None:
+        """The fast path: ~10ms of LAN reads instead of a ~4s metadata round trip."""
+        upstream = StubUpstream(libraries={
+            "main": [{"id": 5, "tmdbId": 1396, "titleSlug": "breaking-bad"}],
+            "anime": [{"id": 37, "tmdbId": 207468, "titleSlug": "kaiju-no-8"}],
+        })
+        inst, path, query, how = self.resolve(tmp_path, upstream, "tmdb:207468")
+        assert (inst.name, path, how) == ("anime", "/series/kaiju-no-8", "library")
+        assert query == []
+        assert not upstream.looked_up(), "an owned title must not wait on the metadata server"
+
+    def test_imdb_ids_match_on_the_fast_path(self, tmp_path) -> None:
+        upstream = StubUpstream(libraries={"anime": [{"id": 1, "imdbId": "tt0213338", "titleSlug": "cowboy-bebop"}]})
+        inst, _, _, how = self.resolve(tmp_path, upstream, "imdb:tt0213338")
+        assert (inst.name, how) == ("anime", "library") and not upstream.looked_up()
+
+    def test_stale_stored_id_still_resolves_through_the_lookup(self, tmp_path) -> None:
+        """Library row has an outdated TMDB id; the lookup bridges it (Sonarr matches on TVDB)."""
+        upstream = StubUpstream(
+            libraries={"anime": [{"id": 37, "tmdbId": 999, "titleSlug": "kaiju-no-8-2024"}]},
+            lookups={"anime": [{"id": 37, "tmdbId": 207468, "titleSlug": "kaiju-no-8"}]},
+        )
+        inst, path, _, how = self.resolve(tmp_path, upstream, "tmdb:207468")
+        assert (inst.name, how) == ("anime", "library")
+        assert path == "/series/kaiju-no-8-2024", "the owner's stored slug wins over the lookup's"
+
+    def test_a_zero_id_matches_nothing(self, tmp_path) -> None:
+        """Titles missing a TMDB id store 0; "tmdb:0" must not claim them."""
+        upstream = StubUpstream(libraries={"anime": [{"id": 1, "tmdbId": 0, "titleSlug": "x"}]})
+        inst, _, _, how = self.resolve(tmp_path, upstream, "tmdb:0")
+        assert (inst.name, how) == ("main", "default")
+        assert upstream.calls == []
 
     def test_unowned_title_follows_a_routing_rule(self, tmp_path) -> None:
         upstream = StubUpstream(lookups={"main": [{"id": 0, "seriesType": "anime"}],

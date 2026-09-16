@@ -213,11 +213,20 @@ work: `url` is a container name the browser cannot resolve.
 `/add/new` links need care. SeerrFin produces them for titles that **are** in a
 library too — it drops a monitored title's progress entry, link included, while
 nothing is downloaded yet. So rather than send every add link to the default
-instance, the proxy asks each instance's own lookup for that id. Sonarr and
-Radarr mark a result with its library id when they already hold the title, and
-the browser goes straight to that title's page on that instance. A title nobody
-holds keeps its add form, on whichever instance your routing rules claim it for,
-or the default.
+instance, the proxy works out who owns the title, cheapest check first:
+
+1. **Your libraries.** The TMDB/TVDB/IMDb id is matched against every
+   instance's own library listing. That's a local read, around 10ms, so a
+   click on a title you already have is instant.
+2. **Each instance's metadata lookup**, only when no library lists that id.
+   This is a trip to the internet and can take a few seconds the first time a
+   title is looked up. It still finds titles whose stored id is out of date
+   (Sonarr marks a lookup result with its library id when it holds the show),
+   and supplies the genres your routing rules match on.
+
+Either way the browser lands on the title's page on the instance that has it.
+A title nobody holds keeps its add form, on whichever instance your routing
+rules claim it for, or the default.
 
 ```yaml
       - name: sonarr-anime
@@ -336,8 +345,8 @@ Three layers, all run in containers so nothing needs installing on the host:
 
 | Suite | What it proves |
 |---|---|
-| **unit** (122 tests) | Id translation, merge strategies, config validation, the route table, and instance selection, in isolation |
-| **mock end-to-end** (100 tests + 17 failure-mode checks) | The proxy over real HTTP against four scripted instances with deliberately colliding ids. Each mock records the requests it receives, so routing is asserted by *which instance was contacted*, not inferred from the body |
+| **unit** (126 tests) | Id translation, merge strategies, config validation, the route table, and instance selection, in isolation |
+| **mock end-to-end** (101 tests + 17 failure-mode checks) | The proxy over real HTTP against four scripted instances with deliberately colliding ids. Each mock records the requests it receives, so routing is asserted by *which instance was contacted*, not inferred from the body |
 | **real end-to-end** (41 tests) | The same proxy against four genuine `linuxserver/sonarr` and `linuxserver/radarr` containers, with real titles fetched from the live metadata servers |
 
 The real suite is the one that matters most. Four fresh instances each number

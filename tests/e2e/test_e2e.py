@@ -49,7 +49,16 @@ def reset_logs() -> None:
 
 
 def log_of(name: str) -> list[dict]:
-    return httpx.get(f"{MOCKS[name]}/__mock/requests", timeout=10.0).json()
+    """Requests an instance received, minus the proxy's background health probe.
+
+    Each proxy container's health check hits every instance's system/status
+    every few seconds.  Left in, a probe that lands between reset_logs() and
+    this call makes "the instance received nothing" assertions fail at random.
+    """
+    return [
+        entry for entry in httpx.get(f"{MOCKS[name]}/__mock/requests", timeout=10.0).json()
+        if not (entry["method"] == "GET" and entry["path"] == "/api/v3/system/status")
+    ]
 
 
 def served_by(response: httpx.Response) -> list[str]:
