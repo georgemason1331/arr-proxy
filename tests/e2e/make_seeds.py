@@ -103,7 +103,7 @@ def sonarr_seed(name: str, series: list[dict], anime: bool) -> dict:
         "tag": [{"id": 1, "label": "anime" if anime else "hd"}],
         "health": [{"source": "IndexerStatusCheck", "type": "warning",
                     "message": f"{name} indexer unavailable", "wikiUrl": ""}],
-        # Both instances live on the same host, so they report the same mounts --
+        # Both instances run on the same host, so they report the same mounts --
         # the proxy has to collapse them instead of double-counting the disk.
         "diskspace": [{"path": "/data", "label": "data", "freeSpace": 500,
                        "totalSpace": 4000}],

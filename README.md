@@ -64,7 +64,17 @@ URLs.
 
 ## Deploying
 
-Copy this directory to your Docker host, e.g. `<stack-dir>/arrproxy`.
+The examples below use placeholders. Replace each with your own value:
+
+| Placeholder | What to put there |
+|---|---|
+| `<stack-dir>` | The directory of the Docker Compose project your Sonarr/Radarr containers run in |
+| `<docker-host>` | IP address or hostname of the machine running Docker, as Jellyfin and your browser reach it |
+| `<sonarr-container>`, `<anime-sonarr-container>` | Container names of your regular and anime Sonarr, as other containers on the same Compose network reach them |
+| `<radarr-container>`, `<anime-radarr-container>` | Container names of your regular and anime Radarr |
+| `<sonarr-ui-port>`, `<anime-sonarr-ui-port>`, … | Host ports each instance's own web UI is published on |
+
+Clone or copy this repository to `<stack-dir>/arrproxy`.
 
 **1. Configuration.**
 
@@ -73,20 +83,25 @@ mkdir -p <stack-dir>/appdata/arrproxy
 cp <stack-dir>/arrproxy/config.example.yaml <stack-dir>/appdata/arrproxy/config.yaml
 ```
 
-Edit it: the four instance URLs already match your container names
-(`sonarr`, `sonarr-anime`, `radarr`, `radarr-anime`). The instance API keys are
-read from the environment, so the four keys already in your `.env` are reused.
-Then add two more to `<stack-dir>/.env` — these are the keys you will hand
-to the Jellyfin plugins:
+Edit it. For each instance, set `url` to how the proxy reaches it
+(`http://<sonarr-container>:8989`) and `public_url` to how your browser reaches
+its web UI (`http://<docker-host>:<sonarr-ui-port>`). API keys are read from the
+environment, so add them to `<stack-dir>/.env`: one per instance (each shows its
+own under **Settings → General → Security**), plus the two combined keys you will
+hand to the Jellyfin plugins:
 
 ```bash
+SONARR_API_KEY=<your regular Sonarr's API key>
+SONARR_ANIME_API_KEY=<your anime Sonarr's API key>
+RADARR_MOVIES_API_KEY=<your regular Radarr's API key>
+RADARR_ANIME_API_KEY=<your anime Radarr's API key>
 ARRPROXY_SONARR_KEY=<a long random string>
 ARRPROXY_RADARR_KEY=<a different long random string>
 ```
 
-`openssl rand -hex 24` produces a suitable one. If you leave them out, the proxy
-generates keys on first start and writes them into `config.yaml` — read them
-from there; the log only shows the last four characters.
+`openssl rand -hex 24` produces a suitable combined key. If you leave them out,
+the proxy generates keys on first start and writes them into `config.yaml` —
+read them from there; the log only shows the last four characters.
 
 **2. Add the service** to `<stack-dir>/docker-compose.yml` so it shares the
 network with the *arr containers and can reach them by name:
@@ -114,8 +129,9 @@ network with the *arr containers and can reach them by name:
     restart: unless-stopped
 ```
 
-The host ports are shifted into the 1xxxx range because `8989`, `7878`, `8990`
-and `7879` are already taken by the real *arrs on that host.
+The published host ports are shifted into the 1xxxx range so they can't clash
+with your real Sonarr and Radarr, which usually publish `8989` and `7878`
+themselves. Any free ports work.
 
 ```bash
 cd <stack-dir> && docker compose up -d arrproxy
@@ -126,7 +142,7 @@ curl -s http://<docker-host>:18787/-/health | jq
 `/-/health` actively probes every instance and returns 503 if an app has none
 reachable — it is what the container health check uses.
 
-**3. Point the plugins at it** (Jellyfin):
+**3. Point the plugins at it** (in Jellyfin):
 
 | Plugin | Field | Value |
 |---|---|---|
@@ -136,11 +152,12 @@ reachable — it is what the container health check uses.
 | | Radarr API key | your `ARRPROXY_RADARR_KEY` |
 | SeerrFin | Sonarr / Radarr URL + key | the same two pairs |
 
-Use the direct `IP:port`, not a Caddy hostname — it keeps the proxy out of the reverse-proxy path.
+Use the direct `host:port` rather than a reverse-proxy hostname. The plugins call
+it server-side from Jellyfin, so an extra proxy hop only adds latency and one
+more thing that can break.
 
-**4. Optional Caddy entries**, if you want to reach it from a browser. Inside
-your existing wildcard site block, before the final `handle { abort }`
-(substitute your own domain):
+**4. Optional reverse proxy entry**, if you want to reach it from a browser.
+For Caddy, substituting your own domain:
 
 ```caddy
     @arrproxy host arrproxy.example.com
@@ -157,8 +174,8 @@ Three listeners, all serving the same thing:
 
 | Port | Serves |
 |---|---|
-| `8989` | Combined Sonarr at the root — `http://host:18989/api/v3/series` |
-| `7878` | Combined Radarr at the root — `http://host:17878/api/v3/movie` |
+| `8989` | Combined Sonarr at the root — `http://<docker-host>:18989/api/v3/series` |
+| `7878` | Combined Radarr at the root — `http://<docker-host>:17878/api/v3/movie` |
 | `8787` | Both, prefixed — `/sonarr/api/v3/series`, `/radarr/api/v3/movie` |
 
 Per-app ports exist because most clients take a bare `http://host:port` and
@@ -230,8 +247,8 @@ rules claim it for, or the default.
 
 ```yaml
       - name: sonarr-anime
-        url: http://sonarr-anime:8989          # how the proxy reaches it
-        public_url: http://<docker-host>:8990 # how your browser reaches it
+        url: http://<anime-sonarr-container>:8989                # how the proxy reaches it
+        public_url: http://<docker-host>:<anime-sonarr-ui-port>  # how your browser reaches it
 ```
 
 These paths are **unauthenticated** — a browser following a button has no API
@@ -304,7 +321,7 @@ would renumber every virtual id.
   a genuine failure to reach any instance, or instances disagreeing about the
   error, produces a 502.
 - **An instance under a `urlBase`** works: give the full base in `url`, e.g.
-  `http://sonarr:8989/sonarr`. The proxy always reports `urlBase: ""` in
+  `http://<sonarr-container>:8989/sonarr`. The proxy always reports `urlBase: ""` in
   `system/status` because the proxy itself serves at the root.
 - **Seerr's `externalServiceId`.** Seerr talks to your instances directly, so it
   stores the id the *real* instance assigned. When SeerrFin uses that id against
@@ -320,10 +337,11 @@ would renumber every virtual id.
 - **`system/status` reports the primary's version.** If your instances run
   different versions, that is the one clients see; `/-/health` shows all of them.
 - **This is not a security boundary.** It holds your instance API keys and runs
-  in the same trust domain. Keep it LAN-only, as with everything else in
-  the stack.
+  in the same trust domain. Keep it on your private network, never exposed to
+  the internet.
 - **Writes are best served directly.** Routing a create is a heuristic, however
-  good. Seerr already talks to all four instances, so leave it that way.
+  good. Anything that can already talk to every instance — Seerr, for one —
+  should keep doing so.
 
 ---
 
@@ -397,7 +415,7 @@ curl -s -H "X-Api-Key: $KEY" http://<docker-host>:18989/api/v3/series/10000001 |
 | 401 from the proxy | Presenting an *instance's* key instead of the combined one, or the Radarr key on the Sonarr port |
 | Only one instance's titles appear | Check `X-ArrProxy-Degraded` and `/-/health`; the other instance is unreachable |
 | 502 `no backing instance answered` | Every instance for that app is down; the detail names each failure |
-| Plugin shows nothing | Confirm it points at the shifted host port (`18989`/`17878`), not `8989`/`7878` |
+| Plugin shows nothing | Confirm it points at the proxy's published port (`18989`/`17878` in the example), not a real instance's |
 | Ids look wrong after a config change | Instances were reordered; index 0 must stay index 0 |
 | An endpoint returns 404 through the proxy | Every instance returned 404 — the path really is absent, not a proxy fault |
 | "Open in Sonarr" lands on a dead page | Set `public_url` on each instance to a browser-reachable address |

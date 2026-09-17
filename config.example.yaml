@@ -1,10 +1,11 @@
 # arr-proxy configuration
 #
-# Copy to <stack-dir>/appdata/arrproxy/config.yaml and fill in the four
-# instance API keys (each *arr shows its own at Settings -> General -> Security).
+# Copy to <stack-dir>/appdata/arrproxy/config.yaml, then replace every
+# <placeholder> with your own value -- README.md -> Deploying explains each one.
+# Every *arr shows its own API key at Settings -> General -> Security.
 #
 # ${VAR} and ${VAR:-default} are expanded from the environment, so the keys can
-# live in the stack's .env instead of this file.
+# live in your Compose project's .env instead of this file.
 
 server:
   host: 0.0.0.0
@@ -60,22 +61,22 @@ apps:
       # its ids pass through untouched.  Put your largest / most-referenced
       # instance first.
       - name: sonarr
-        url: http://sonarr:8989
+        url: http://<sonarr-container>:8989
         api_key: ${SONARR_API_KEY}
-        public_url: http://<docker-host>:8989
+        public_url: http://<docker-host>:<sonarr-ui-port>
         default: true          # new series land here unless a rule matches
 
       - name: sonarr-anime
-        url: http://sonarr-anime:8989
+        url: http://<anime-sonarr-container>:8989
         api_key: ${SONARR_ANIME_API_KEY}
         # Optional. Where a BROWSER can reach this instance's own web UI, used
         # only for SeerrFin's "Open in Sonarr" deep links -- `url` above is a
         # container name that a browser cannot resolve. Defaults to `url`.
-        public_url: http://<docker-host>:8990
+        public_url: http://<docker-host>:<anime-sonarr-ui-port>
         routing:
           # Only consulted for a create that carries no id from this proxy.
           series_types: [anime]
-          root_folders: ["/data/media/anime"]
+          root_folders: ["/data/media/anime"]   # example: your anime root folder, as Sonarr sees it
           # title_regex: "^\\[anime\\]"
           # genres: [Animation, Anime]
 
@@ -86,24 +87,24 @@ apps:
 
     instances:
       - name: radarr
-        url: http://radarr:7878
+        url: http://<radarr-container>:7878
         api_key: ${RADARR_MOVIES_API_KEY}
-        public_url: http://<docker-host>:7878
+        public_url: http://<docker-host>:<radarr-ui-port>
         default: true
 
       - name: radarr-anime
-        url: http://radarr-anime:7878
+        url: http://<anime-radarr-container>:7878
         api_key: ${RADARR_ANIME_API_KEY}
-        public_url: http://<docker-host>:7879
+        public_url: http://<docker-host>:<anime-radarr-ui-port>
         routing:
-          root_folders: ["/data/media/anime-movies"]
+          root_folders: ["/data/media/anime-movies"]   # example: as Radarr sees it
           genres: [Animation, Anime]
 
 # A third or fourth instance is just another list entry -- index 2 gets ids
 # starting at 20000000, index 3 at 30000000, and so on:
 #
 #      - name: sonarr-4k
-#        url: http://sonarr-4k:8989
+#        url: http://<4k-sonarr-container>:8989
 #        api_key: ${SONARR_4K_API_KEY}
 #        routing:
 #          root_folders: ["/data/media/tv-4k"]

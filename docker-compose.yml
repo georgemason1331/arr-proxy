@@ -1,8 +1,8 @@
 # Standalone stack for arr-proxy.
 #
-# In a typical stack you will more likely paste the `arrproxy:` service block
-# into <stack-dir>/docker-compose.yml so it shares the network with the four
-# *arr containers and can reach them by name. See README.md -> Deploying.
+# If your Sonarr and Radarr run in another Compose project, paste the
+# `arrproxy:` service block into that project's docker-compose.yml instead, so
+# it shares their network and can reach them by name. See README.md -> Deploying.
 
 services:
   arrproxy:
@@ -26,8 +26,8 @@ services:
       # you left one unset.
       - ./appdata/arrproxy:/config
     ports:
-      # Host ports are shifted so they cannot clash with the real *arrs, which
-      # already hold 8989/7878/8990/7879 on this host.
+      # Host ports are shifted so they cannot clash with your real Sonarr and
+      # Radarr, which usually publish 8989 and 7878 themselves.
       - "18989:8989"   # combined Sonarr
       - "17878:7878"   # combined Radarr
       - "18787:8787"   # unified: /sonarr/... and /radarr/...
