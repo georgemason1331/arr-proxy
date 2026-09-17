@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl, urlencode
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from . import merge
+from . import merge, paths
 from .config import AppConfig, Instance, Settings
 from .idmap import MEDIACOVER_RE, IdMapper
 from .upstream import Reply, Upstream, sanitize_request_headers
@@ -130,6 +130,11 @@ class AppRouter:
         self.api_prefix = f"/api/{app.api_version}"
         self.id_query_keys = self.mapper.id_keys | EXTRA_ID_QUERY_KEYS
         self._routes = self._build_routes()
+        # Every instance's client paths, for the one decision that has to read a
+        # path before we know which instance it belongs to: where a create goes.
+        self._paths_in = paths.order(
+            (dst, src) for inst in app.instances for src, dst in inst.path_map
+        )
 
     # ------------------------------------------------------------------
     # route table
@@ -402,21 +407,26 @@ class AppRouter:
             self.upstream.call(
                 self.app, inst, method, path,
                 params=self.query_for(plain, ids, inst.index) + list(extra_params or []),
-                content=self._body_for(body), headers=headers, deadline=deadline,
+                content=self._body_for(body, inst), headers=headers, deadline=deadline,
             )
             for inst in chosen
         ]
         return list(await asyncio.gather(*calls))
 
-    def _body_for(self, body: bytes | None) -> bytes | None:
-        """Translate virtual ids inside a request body back to instance ids."""
+    def _body_for(self, body: bytes | None, inst: Instance | None = None) -> bytes | None:
+        """Translate a request body back into one instance's ids and paths."""
         if not body:
             return None
         try:
             parsed = json.loads(body)
         except (ValueError, UnicodeDecodeError):
             return body
-        return json.dumps(self.mapper.decode(parsed)).encode("utf-8")
+        parsed = self.mapper.decode(parsed)
+        if inst is not None:
+            # Undo what we served, so a client echoing a path back at us cannot
+            # point this instance at a directory only its clients can see.
+            parsed = paths.rewrite(parsed, inst.path_map_in)
+        return json.dumps(parsed).encode("utf-8")
 
     # ------------------------------------------------------------------
     # handlers
@@ -541,7 +551,7 @@ class AppRouter:
         reply = await self.upstream.call(
             self.app, inst, method, upstream_path,
             params=self.query_for(plain, ids, index),
-            content=self._body_for(body), headers=headers,
+            content=self._body_for(body, inst), headers=headers,
         )
 
         # Only a *read* may be retried elsewhere.  Guessing an instance for a
@@ -594,7 +604,7 @@ class AppRouter:
         reply = await self.upstream.call(
             self.app, inst, method, path,
             params=self.query_for(plain, ids, inst.index),
-            content=self._body_for(body), headers=headers,
+            content=self._body_for(body, inst), headers=headers,
         )
         if not reply.ok and reply.error:
             raise Degraded([reply])
@@ -605,12 +615,15 @@ class AppRouter:
             payload = json.loads(body) if body else {}
         except (ValueError, UnicodeDecodeError):
             payload = {}
+        # A root_folders rule is written in the instances' own paths, so undo any
+        # path mapping before matching -- the client sends back what we served.
+        payload = paths.rewrite(payload, self._paths_in)
         inst = self.pick_for_payload(payload if isinstance(payload, dict) else {})
         log.info("routing %s %s to %s", method, path, inst.name)
         reply = await self.upstream.call(
             self.app, inst, method, path,
             params=self.query_for(plain, ids, inst.index),
-            content=self._body_for(body), headers=headers,
+            content=self._body_for(body, inst), headers=headers,
         )
         if not reply.ok and reply.error:
             raise Degraded([reply])
@@ -691,6 +704,9 @@ class AppRouter:
             for key, value in list(scoped.items()):
                 if key in self.mapper.id_keys and key not in id_fields:
                     scoped[key] = self.mapper.decode({key: value})[key]
+            # A bulk edit can carry a rootFolderPath to move titles to, which
+            # must arrive as a folder this instance actually has.
+            scoped = paths.rewrite(scoped, inst.path_map_in)
             replies.append(
                 await self.upstream.call(
                     self.app, inst, method, path,

@@ -201,7 +201,9 @@ class TestAggregation:
 
     def test_root_folders_merge(self, sonarr) -> None:
         paths = {r["path"] for r in sonarr.get("/api/v3/rootfolder").json()}
-        assert paths == {"/data/media/tv", "/data/media/anime"}
+        # sonarr-anime is configured with a path_map, so its root folder is
+        # served as the client's path -- see TestPathMapping.
+        assert paths == {"/data/media/tv", "/mnt/jellyfin/anime"}
 
     def test_tags_merge_with_distinct_ids(self, sonarr) -> None:
         rows = sonarr.get("/api/v3/tag").json()
@@ -380,6 +382,63 @@ class TestLookup:
 # ---------------------------------------------------------------------------
 # writes
 # ---------------------------------------------------------------------------
+class TestPathMapping:
+    """sonarr-anime serves /data/media/anime as /mnt/jellyfin/anime.
+
+    Jellyfin plugins decide which library an item belongs to by matching the
+    *arr's path against their own library folders, which fails when the two see
+    the media at different paths.
+    """
+
+    def test_library_paths_are_mapped_on_the_mapped_instance(self, sonarr) -> None:
+        rows = sonarr.get("/api/v3/series").json()
+        anime = [r for r in rows if r["id"] > BLOCK]
+        assert anime, "expected the anime instance's series"
+        assert all(r["path"].startswith("/mnt/jellyfin/anime/") for r in anime)
+
+    def test_other_instances_are_untouched(self, sonarr, radarr) -> None:
+        main = [r for r in sonarr.get("/api/v3/series").json() if r["id"] < BLOCK]
+        assert main and all(r["path"].startswith("/data/media/tv/") for r in main)
+        movies = radarr.get("/api/v3/movie").json()
+        assert movies and all(r["path"].startswith("/data/media/") for r in movies)
+
+    def test_the_calendar_carries_the_mapped_path(self, sonarr) -> None:
+        """What the Jellyfin upcoming sections actually read."""
+        rows = sonarr.get(
+            "/api/v3/calendar",
+            params={"includeSeries": "true", "start": "2026-09-01T00:00:00Z",
+                    "end": "2026-10-01T00:00:00Z"},
+        ).json()
+        anime = [r for r in rows if r["seriesId"] > BLOCK]
+        assert anime, "expected upcoming episodes from the anime instance"
+        assert all(r["series"]["path"].startswith("/mnt/jellyfin/anime/") for r in anime)
+
+    def test_a_create_reaches_the_instance_with_its_own_path(self, sonarr) -> None:
+        """The mapping must never travel upstream: Sonarr would use it as a folder."""
+        reset_logs()
+        response = sonarr.post(
+            "/api/v3/series",
+            json={"title": "Frieren 2", "tvdbId": 424537,
+                  "rootFolderPath": "/mnt/jellyfin/anime", "seasons": []},
+        )
+        assert served_by(response) == ["sonarr-anime"], "routing rules still match"
+        created = next(e for e in log_of("sonarr-anime") if e["method"] == "POST")
+        assert created["body"]["rootFolderPath"] == "/data/media/anime"
+        # ...and the answer comes back in the client's terms again.
+        assert response.json()["rootFolderPath"] == "/mnt/jellyfin/anime"
+
+    def test_a_create_still_accepts_the_instances_own_path(self, sonarr) -> None:
+        reset_logs()
+        response = sonarr.post(
+            "/api/v3/series",
+            json={"title": "Frieren 3", "tvdbId": 424538,
+                  "rootFolderPath": "/data/media/anime", "seasons": []},
+        )
+        assert served_by(response) == ["sonarr-anime"]
+        created = next(e for e in log_of("sonarr-anime") if e["method"] == "POST")
+        assert created["body"]["rootFolderPath"] == "/data/media/anime"
+
+
 class TestWrites:
     def test_create_routes_on_the_quality_profile_the_client_chose(self, sonarr) -> None:
         reset_logs()

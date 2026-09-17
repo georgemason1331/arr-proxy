@@ -47,12 +47,18 @@ def _authorized(request: Request) -> bool:
     return supplied == API_KEY
 
 
-def _record(request: Request) -> None:
+async def _record(request: Request) -> None:
+    raw = await request.body()  # cached by Starlette, so handlers can still read it
+    try:
+        body = json.loads(raw) if raw else None
+    except ValueError:
+        body = None
     REQUESTS.append(
         {
             "method": request.method,
             "path": request.url.path,
             "query": dict(request.query_params),
+            "body": body,
             "instance": NAME,
         }
     )
@@ -145,7 +151,7 @@ async def _dispatch(request: Request) -> Response:
 
     if not _authorized(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    _record(request)
+    await _record(request)
 
     method = request.method.upper()
     api = "/api/v3"

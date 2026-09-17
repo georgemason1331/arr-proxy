@@ -11,10 +11,15 @@ from typing import Any
 
 import yaml
 
+from . import paths
+
 APP_DEFAULT_PORTS = {"sonarr": 8989, "radarr": 7878, "lidarr": 8686, "readarr": 8787}
 APP_API_VERSION = {"sonarr": "v3", "radarr": "v3", "lidarr": "v1", "readarr": "v1"}
 
 _ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+# A POSIX path with something after the slash, or a Windows drive path.  Bare
+# "/" is refused: mapping the filesystem root would rewrite every path there is.
+_ABS_PATH = re.compile(r"^(?:/[^/].*|[A-Za-z]:[\\/].+)$")
 
 
 class ConfigError(Exception):
@@ -74,6 +79,9 @@ class Instance:
     # a container name, which a browser cannot resolve, so deep links (SeerrFin's
     # "Open in Sonarr" button) need a separately reachable address.
     public_url: str | None = None
+    # Path prefixes to rewrite in what we serve, as (this instance's path, the
+    # client's path).  Empty -- the default -- means paths are passed through.
+    path_map: tuple[tuple[str, str], ...] = ()
 
     @property
     def base(self) -> str:
@@ -82,6 +90,11 @@ class Instance:
     @property
     def browser_base(self) -> str:
         return (self.public_url or self.url).rstrip("/")
+
+    @property
+    def path_map_in(self) -> list[tuple[str, str]]:
+        """`path_map` reversed, for paths arriving in a request body."""
+        return paths.invert(self.path_map)
 
 
 @dataclass
@@ -126,6 +139,27 @@ def _as_list(value: Any) -> list[str]:
     return [str(v) for v in value]
 
 
+def _path_map(name: str, raw: Any) -> tuple[tuple[str, str], ...]:
+    """Parse `path_map: {<instance path>: <client path>}` for one instance."""
+    if not raw:
+        return ()
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            f"instance {name!r} path_map must be a mapping of "
+            "'<path this instance uses>: <path your clients use>'"
+        )
+    pairs: list[tuple[str, str]] = []
+    for src_raw, dst_raw in raw.items():
+        src, dst = str(src_raw).rstrip("/\\"), str(dst_raw).rstrip("/\\")
+        for original, value in ((src_raw, src), (dst_raw, dst)):
+            if not _ABS_PATH.match(value):
+                raise ConfigError(
+                    f"instance {name!r} path_map entry {original!r} is not an absolute path"
+                )
+        pairs.append((src, dst))
+    return tuple(paths.order(pairs))
+
+
 def _build_app(app_type: str, raw: dict[str, Any], generated: dict[str, str]) -> AppConfig:
     if app_type not in APP_API_VERSION:
         raise ConfigError(
@@ -168,6 +202,7 @@ def _build_app(app_type: str, raw: dict[str, Any], generated: dict[str, str]) ->
                 api_key=key,
                 index=index,
                 public_url=public,
+                path_map=_path_map(name, item.get("path_map")),
                 is_default=bool(item.get("default", False)),
                 enabled=bool(item.get("enabled", True)),
                 routing=Routing(

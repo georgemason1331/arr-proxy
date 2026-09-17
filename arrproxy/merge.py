@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from . import paths
 from .idmap import IdMapper
 from .upstream import Reply
 
@@ -13,7 +14,9 @@ def decoded(reply: Reply, mapper: IdMapper) -> Any:
     payload = reply.json()
     if payload is None:
         return None
-    return mapper.encode(payload, reply.instance.index)
+    # Paths are rewritten here too, so every read -- merged or single -- serves
+    # the same view of where a title lives.  Usually a no-op: see paths.py.
+    return paths.rewrite(mapper.encode(payload, reply.instance.index), reply.instance.path_map)
 
 
 def _path_value(record: Any, dotted: str) -> Any:

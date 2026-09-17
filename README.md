@@ -214,6 +214,7 @@ apps:
 | `apps.<app>.instances[].url` | — | How the proxy reaches the instance (include any URL base, e.g. `http://<sonarr-container>:8989/sonarr`) |
 | `apps.<app>.instances[].api_key` | — | That instance's own API key |
 | `apps.<app>.instances[].public_url` | `url` | How a browser reaches the instance's web UI, for "Open in" links |
+| `apps.<app>.instances[].path_map` | — | Serve this instance's folders under a different path ([below](#when-your-client-sees-your-media-somewhere-else)) |
 | `apps.<app>.instances[].default` | first | Where new titles go when nothing else decides |
 | `apps.<app>.instances[].enabled` | `true` | Set to `false` to take an instance out of rotation |
 | `apps.<app>.instances[].routing` | — | Rules for new titles (below) |
@@ -238,6 +239,34 @@ match of:
 The first instance in each list keeps its own ids; later instances are shifted
 (see below). **Put your main instance first, and don't reorder the list
 later** — that would change every id your apps have seen.
+
+### When your client sees your media somewhere else
+
+Some clients work out what a title is from where it lives. Home Screen Sections'
+**Filter Upcoming Sections by Library Access** hides upcoming items from users
+who can't see the library they belong to, and it decides which library that is
+by matching the *arr's path against Jellyfin's own library folders. If the two
+see the same media at different paths — a different mount point, or a virtual
+file system such as Shoko's — nothing matches, and the plugin shows those items
+to everyone.
+
+`path_map` serves an instance's folders under the path your client knows:
+
+```yaml
+      - name: sonarr-anime
+        url: http://<anime-sonarr-container>:8989
+        api_key: ${SONARR_ANIME_API_KEY}
+        path_map:
+          /data/media/anime: <the same media, as Jellyfin sees it>
+```
+
+- Only `path` and `rootFolderPath` change, and only for that instance.
+- Whole folder names only, so `/data/media/anime` never claims
+  `/data/media/anime-movies`.
+- Anything a client sends back is mapped in reverse first, so the instance only
+  ever sees its own paths and can't be told to write somewhere else.
+- Nothing is read from disk: the mapped path only has to match what your client
+  believes, and adding a map never changes the media itself.
 
 ---
 
@@ -359,6 +388,7 @@ docker compose logs arrproxy | grep "deep link"
 | A 404 through the proxy | Every instance returned 404 — the thing really isn't there |
 | "Open in" opens a page that won't load | Set `public_url` on each instance to an address your browser can reach |
 | "Open in" opens the wrong instance | `docker compose logs arrproxy \| grep "deep link"` shows each click; `default` means no instance reported having that title |
+| Upcoming items show for users with no access to that library | Jellyfin and your *arr disagree about where the media lives — see [path_map](#when-your-client-sees-your-media-somewhere-else) |
 | One instance's data is sometimes missing | It's slower than `fanout_timeout` — check that instance |
 | Ids changed after editing the config | The instance list was reordered — put it back |
 | Log says an id is `>= id_block` | Raise `server.id_block` above that id and restart |

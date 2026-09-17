@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from arrproxy import config as cfg
-from arrproxy import merge
+from arrproxy import merge, paths
 from arrproxy.idmap import IdMapper
 from arrproxy.routing import AppRouter
 from arrproxy.upstream import Reply
@@ -278,6 +278,15 @@ apps:
 """
 
 
+# The same, with the anime instance serving its folder under a client's path.
+MAPPED_CONFIG = BASE_CONFIG.replace(
+    "        api_key: b",
+    "        api_key: b\n"
+    "        path_map:\n"
+    "          /data/media/anime: /mnt/jellyfin/anime",
+)
+
+
 def write(tmp_path: Path, text: str) -> Path:
     target = tmp_path / "config.yaml"
     target.write_text(text, encoding="utf-8")
@@ -336,6 +345,43 @@ class TestConfig:
         generated = cfg.load(path).apps["sonarr"].api_key
         assert re.fullmatch(r"[0-9a-f]{32}", generated)
         assert cfg.load(path).apps["sonarr"].api_key == generated
+
+    def test_path_map_is_parsed_longest_source_first(self, tmp_path) -> None:
+        text = BASE_CONFIG.format(key="k" * 12).replace(
+            "        api_key: b\n",
+            "        api_key: b\n"
+            "        path_map:\n"
+            "          /data/media/anime: /mnt/jellyfin/anime/\n"
+            "          /data/media/anime-movies: /mnt/jellyfin/anime-movies\n",
+        )
+        anime = cfg.load(write(tmp_path, text)).apps["sonarr"].instances[1]
+        assert anime.path_map == (
+            ("/data/media/anime-movies", "/mnt/jellyfin/anime-movies"),
+            ("/data/media/anime", "/mnt/jellyfin/anime"),
+        ), "trailing slashes trimmed, longest first"
+        assert anime.path_map_in[0] == (
+            "/mnt/jellyfin/anime-movies", "/data/media/anime-movies"
+        )
+
+    def test_no_path_map_means_no_mapping(self, tmp_path) -> None:
+        app = cfg.load(write(tmp_path, BASE_CONFIG.format(key="k" * 12))).apps["sonarr"]
+        assert all(inst.path_map == () for inst in app.instances)
+
+    @pytest.mark.parametrize(
+        "entry, message",
+        [
+            ("        path_map:\n          /data/media/anime: relative/path\n", "absolute path"),
+            ("        path_map:\n          /data/media/anime: /\n", "absolute path"),
+            ("        path_map:\n          anime: /mnt/jellyfin/anime\n", "absolute path"),
+            ("        path_map: not-a-mapping\n", "mapping"),
+        ],
+    )
+    def test_invalid_path_maps_are_rejected(self, tmp_path, entry, message) -> None:
+        text = BASE_CONFIG.format(key="k" * 12).replace(
+            "        api_key: b\n", "        api_key: b\n" + entry
+        )
+        with pytest.raises(cfg.ConfigError, match=message):
+            cfg.load(write(tmp_path, text))
 
     def test_saving_a_generated_key_writes_no_other_secret(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("INSTANCE_KEY", "instance-secret-value")
@@ -437,6 +483,98 @@ class TestShippedExample:
         for var in self.INSTANCE_KEYS:
             assert "${%s}" % var in saved
             assert f"{var.lower()}-value" not in saved
+
+
+class TestPathMapping:
+    """Serving a title's folder as the client sees it, and never the reverse."""
+
+    MAP = tuple(paths.order([("/data/media/anime", "/mnt/jellyfin/anime"),
+                             ("/data/media/anime-movies", "/mnt/jellyfin/anime-movies")]))
+
+    def test_a_prefix_is_replaced(self) -> None:
+        out = paths.rewrite({"path": "/data/media/anime/Frieren"}, self.MAP)
+        assert out == {"path": "/mnt/jellyfin/anime/Frieren"}
+
+    def test_the_root_itself_is_replaced(self) -> None:
+        out = paths.rewrite({"rootFolderPath": "/data/media/anime"}, self.MAP)
+        assert out == {"rootFolderPath": "/mnt/jellyfin/anime"}
+
+    def test_a_sibling_directory_is_not_claimed(self) -> None:
+        """Without whole-segment matching, /…/anime would swallow /…/anime-movies."""
+        only_series = [("/data/media/anime", "/mnt/jellyfin/anime")]
+        movie = {"path": "/data/media/anime-movies/Perfect Blue"}
+        assert paths.rewrite(movie, only_series) == movie
+        assert paths.rewrite(movie, self.MAP) == {
+            "path": "/mnt/jellyfin/anime-movies/Perfect Blue"
+        }
+
+    def test_only_path_keys_are_touched(self) -> None:
+        node = {"title": "/data/media/anime", "overview": "in /data/media/anime",
+                "path": "/data/media/anime/Frieren"}
+        out = paths.rewrite(node, self.MAP)
+        assert out["title"] == node["title"] and out["overview"] == node["overview"]
+        assert out["path"] == "/mnt/jellyfin/anime/Frieren"
+
+    def test_nested_and_listed_paths_are_mapped(self) -> None:
+        """The calendar shape a Jellyfin upcoming section reads."""
+        rows = [{"id": 1, "series": {"path": "/data/media/anime/Frieren"}}]
+        assert paths.rewrite(rows, self.MAP)[0]["series"]["path"] == "/mnt/jellyfin/anime/Frieren"
+
+    def test_unmapped_paths_pass_through(self) -> None:
+        node = {"path": "/data/media/tv/Severance"}
+        assert paths.rewrite(node, self.MAP) == node
+
+    def test_no_map_is_a_no_op(self) -> None:
+        node = {"path": "/data/media/anime/Frieren"}
+        assert paths.rewrite(node, ()) is node, "an unconfigured instance pays nothing"
+
+    def test_non_string_values_are_left_alone(self) -> None:
+        assert paths.rewrite({"path": None}, self.MAP) == {"path": None}
+
+    def test_the_inverse_undoes_the_mapping(self) -> None:
+        node = {"path": "/data/media/anime/Frieren", "rootFolderPath": "/data/media/anime"}
+        served = paths.rewrite(node, self.MAP)
+        assert paths.rewrite(served, paths.invert(self.MAP)) == node
+
+    def test_a_response_is_mapped_and_ids_still_translated(self) -> None:
+        inst = cfg.Instance(name="anime", url="http://anime", api_key="k", index=1,
+                            path_map=self.MAP)
+        served = merge.decoded(
+            Reply(instance=inst, status=200, headers={"content-type": "application/json"},
+                  body=json.dumps([{"id": 3, "path": "/data/media/anime/Frieren"}]).encode()),
+            IdMapper("sonarr", BLOCK),
+        )
+        assert served == [{"id": BLOCK + 3, "path": "/mnt/jellyfin/anime/Frieren"}]
+
+    def test_a_request_body_is_turned_back_into_the_instances_path(self, tmp_path) -> None:
+        router = build_router(tmp_path)
+        inst = cfg.Instance(name="anime", url="http://anime", api_key="k", index=1,
+                            path_map=self.MAP)
+        body = json.dumps({"rootFolderPath": "/mnt/jellyfin/anime"}).encode()
+        assert json.loads(router._body_for(body, inst)) == {
+            "rootFolderPath": "/data/media/anime"
+        }
+
+    def test_a_bulk_edit_arrives_with_the_instances_path(self, tmp_path) -> None:
+        """A /series/editor PUT can carry a folder to move titles into."""
+        import asyncio
+
+        sent: list[tuple[str, dict]] = []
+
+        class Recorder:
+            async def call(self, app, inst, method, path, params=None, content=None, **_):
+                sent.append((inst.name, json.loads(content)))
+                return Reply(instance=inst, status=202,
+                             headers={"content-type": "application/json"}, body=b"[]")
+
+        settings = cfg.load(write(tmp_path, MAPPED_CONFIG.format(key="k" * 12)))
+        router = AppRouter(settings, settings.apps["sonarr"], Recorder())
+        asyncio.run(router._h_split(
+            method="PUT", path="/api/v3/series/editor", plain=[], ids={}, headers={},
+            body=json.dumps({"seriesIds": [BLOCK + 7],
+                             "rootFolderPath": "/mnt/jellyfin/anime"}).encode(),
+        ))
+        assert sent == [("anime", {"seriesIds": [7], "rootFolderPath": "/data/media/anime"})]
 
 
 class TestRoutingRules:

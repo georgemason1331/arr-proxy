@@ -74,6 +74,14 @@ apps:
         # only for SeerrFin's "Open in Sonarr" deep links -- `url` above is a
         # container name that a browser cannot resolve. Defaults to `url`.
         public_url: http://<docker-host>:<anime-sonarr-ui-port>
+        # Optional. Serve this instance's folders under a different path, for
+        # clients that work out what a title is from where it lives.  Jellyfin's
+        # "Filter Upcoming Sections by Library Access" matches these paths
+        # against its own library folders, and shows everything to everyone when
+        # the two disagree.  Requests are mapped back before they reach the
+        # instance, so it never sees the client's path.
+        # path_map:
+        #   /data/media/anime: <the same media, as Jellyfin sees it>
         routing:
           # Only consulted for a create that carries no id from this proxy.
           series_types: [anime]

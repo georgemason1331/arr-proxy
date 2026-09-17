@@ -22,6 +22,10 @@ apps:
       - name: sonarr-anime
         url: http://sonarr-anime:8989
         api_key: animekey-sonarr
+        # Exercises path mapping: this instance's /data/media/anime is served to
+        # clients as /mnt/jellyfin/anime, and turned back on the way upstream.
+        path_map:
+          /data/media/anime: /mnt/jellyfin/anime
         routing:
           series_types: [anime]
           root_folders: ["/data/media/anime"]
