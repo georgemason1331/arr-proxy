@@ -2,7 +2,7 @@
 #
 # If your Sonarr and Radarr run in another Compose project, paste the
 # `arrproxy:` service block into that project's docker-compose.yml instead, so
-# it shares their network and can reach them by name. See README.md -> Deploying.
+# it shares their network and can reach them by name. See README.md -> Quick start.
 
 services:
   arrproxy:
@@ -17,7 +17,7 @@ services:
       # Referenced by config.yaml; keep the real values in .env.
       SONARR_API_KEY: ${SONARR_API_KEY}
       SONARR_ANIME_API_KEY: ${SONARR_ANIME_API_KEY}
-      RADARR_MOVIES_API_KEY: ${RADARR_MOVIES_API_KEY}
+      RADARR_API_KEY: ${RADARR_API_KEY}
       RADARR_ANIME_API_KEY: ${RADARR_ANIME_API_KEY}
       ARRPROXY_SONARR_KEY: ${ARRPROXY_SONARR_KEY}
       ARRPROXY_RADARR_KEY: ${ARRPROXY_RADARR_KEY}

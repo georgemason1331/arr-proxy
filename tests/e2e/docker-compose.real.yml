@@ -1,7 +1,7 @@
 name: arrproxy-real
 
-# Four genuine *arr instances -- two Sonarr, two Radarr -- mirroring the
-# regular/anime split of the real stack.  The mock suite proves the merge logic;
+# Four genuine *arr instances -- two Sonarr, two Radarr -- in the common
+# regular-plus-anime arrangement.  The mock suite proves the merge logic;
 # this one proves the proxy against the actual API surface: real auth, real
 # response shapes, real paged envelopes, and real colliding ids (every fresh
 # instance numbers its quality profiles and tags from 1).

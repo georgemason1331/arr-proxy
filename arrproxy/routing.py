@@ -27,6 +27,7 @@ API_KEY_QUERY = {"apikey", "apiKey"}
 # Only these can be resolved to an owner; free text matches many titles.
 ID_TERM = re.compile(r"^(?:tmdb|tvdb|imdb)(?:id)?:\S+$", re.IGNORECASE)
 EXTERNAL_ID_FIELDS = {"tmdb": "tmdbId", "tvdb": "tvdbId", "imdb": "imdbId"}
+IMDB_ID = re.compile(r"tt\d+", re.IGNORECASE)
 
 # Extra query parameters that carry entity ids but are not object field names.
 EXTRA_ID_QUERY_KEYS = frozenset({"ids", "id"})
@@ -856,12 +857,19 @@ class AppRouter:
 
         kind, _, value = term.partition(":")
         field = EXTERNAL_ID_FIELDS[kind.lower().removesuffix("id")]
-        if field != "imdbId" and (_as_int(value) or 0) <= 0:
-            # "tmdb:0" would otherwise match every title that lacks the id.
+        well_formed = (
+            bool(IMDB_ID.fullmatch(value)) if field == "imdbId" else (_as_int(value) or 0) > 0
+        )
+        if not well_formed:
+            # "tmdb:0" or "imdb:None" would otherwise match every title that
+            # lacks that id -- str(None) == "None" -- and redirect to it.
             return self.app.default_instance, add_path, plain, "default"
 
         listings = await self._library_listings()
-        owned = self._find_owned(listings, lambda row: str(row.get(field)) == value)
+        owned = self._find_owned(
+            listings,
+            lambda row: row.get(field) is not None and str(row.get(field)) == value,
+        )
         if owned:
             inst, row = owned
             return inst, f"/{self.entity}/{row['titleSlug']}", [], "library"

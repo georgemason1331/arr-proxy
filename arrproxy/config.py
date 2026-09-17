@@ -188,6 +188,16 @@ def _build_app(app_type: str, raw: dict[str, Any], generated: dict[str, str]) ->
         # would need reconfiguring, so we persist it back beside the config.
         api_key = secrets.token_hex(16)
         generated[app_type] = api_key
+    if api_key.lower().startswith("change-me"):
+        # Earlier example configs fell back to published "change-me-..." strings
+        # when the key's environment variable was absent. Anyone who has read
+        # the repository knows them, so refuse to run with one rather than
+        # silently accept a public credential.
+        raise ConfigError(
+            f"app {app_type!r} api_key is still the example placeholder. Set a long "
+            "random value (e.g. `openssl rand -hex 24`), or leave it empty to have "
+            "one generated."
+        )
     if len(api_key) < 8:
         raise ConfigError(f"app {app_type!r} api_key is too short to be a credential")
 

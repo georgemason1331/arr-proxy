@@ -4,3 +4,6 @@ __pycache__/
 config.yaml
 appdata/
 tests/e2e/generated/
+
+# Personal deployment notes: kept locally, never published.
+README.local.md

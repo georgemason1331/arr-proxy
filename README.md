@@ -1,122 +1,119 @@
 # arr-proxy
 
-One URL and one API key in front of several Sonarr or Radarr instances.
+**Put several Sonarr or Radarr instances behind one URL and one API key.**
 
-Some Jellyfin plugins — **Home Screen Sections** and **SeerrFin** among them —
-store exactly one Sonarr and one Radarr connection. If you run a regular *and*
-an anime instance of each, you have to pick one and the other is invisible.
-This proxy presents all of them as a single instance: it fans each request out,
-merges the answers, and rewrites the entity ids so nothing collides.
+Some tools only let you connect *one* Sonarr and *one* Radarr — the Jellyfin
+plugins **Home Screen Sections** and **SeerrFin** are two examples. If you run
+more than one of each (a regular instance and an anime instance, say),
+everything in the second one is invisible to them.
 
-Requests that name a specific entity are routed back to the instance that owns
-it, so `GET /series/10000001` reaches your anime Sonarr and `GET /series/1`
-reaches the regular one.
+arr-proxy looks like a single Sonarr (or Radarr) to those tools. Behind the
+scenes it sends each request to all of your real instances, merges the
+answers, and remembers which instance owns what, so follow-up requests reach
+the right one.
 
-Anything that already accepts multiple instances — Seerr, Prowlarr, Recyclarr,
-Bazarr, Unpackerr — should keep talking to each instance directly. This exists
-only for the clients that cannot.
+**What you get**
 
----
+- One combined calendar, library, queue and history across all your instances.
+- Ids that never collide, with requests for a specific series or movie routed
+  to the instance that owns it.
+- Posters and "Open in Sonarr/Radarr" links that land on the right instance.
+- Graceful degradation: if one instance is down or hung, you still get the
+  others, plus a response header naming the one that's missing.
+- Your real instance API keys stay on the server. Clients only ever see the
+  combined key.
 
-## How the ids work
-
-Every instance numbers its rows from 1 independently. Both your Sonarr
-instances have a series `1`, a tag `1`, and quality profiles `1–6`. Merging
-them naively produces duplicates that no client can disambiguate.
-
-arr-proxy applies a stateless block offset:
-
-```
-virtual id = real id + (instance index × id_block)      # id_block defaults to 10,000,000
-```
-
-| Instance | Real id | Virtual id |
-|---|---|---|
-| index 0 (first in the config) | 1 | **1** |
-| index 1 | 1 | **10000001** |
-| index 2 | 1 | **20000001** |
-
-Two properties matter:
-
-- **Instance 0 is identity mapped.** Its ids pass through untouched, so anything
-  that already holds a real id from your primary instance keeps working.
-- **It is stateless.** Decoding is `divmod`, so there is no database to lose and
-  ids survive restarts and reconfiguration.
-
-### What gets rewritten, and what does not
-
-Rewritten (ids local to one instance): `id`, `seriesId`, `episodeId`,
-`episodeFileId`, `movieId`, `movieFileId`, `collectionId`, `qualityProfileId`,
-`languageProfileId`, `metadataProfileId`, `rootFolderId`, `tags`, `indexerId`,
-`downloadClientId`, `importListId`, and the entity id inside `/MediaCover/…`
-URLs.
-
-**Never** rewritten:
-
-- External ids — `tvdbId`, `tmdbId`, `imdbId`, `tvRageId`, `tvMazeId`. These
-  identify the title itself; shifting one would break every metadata lookup.
-- Global constants — quality definition ids (`quality.quality.id`), language
-  ids. They are the same on every instance, so they are already unambiguous.
-- `remoteUrl` on images, and `path` on series and movies. Home Screen Sections
-  matches library items by `path`, so it has to arrive verbatim.
+**When not to use it:** anything that already supports multiple instances —
+Seerr/Jellyseerr/Overseerr, Prowlarr, Bazarr, Recyclarr, Unpackerr — should keep
+talking to each instance directly. arr-proxy is for the tools that can't.
 
 ---
 
-## Deploying
+## Quick start
 
-The examples below use placeholders. Replace each with your own value:
+You need Docker with Docker Compose, and Sonarr/Radarr instances the proxy can
+reach over the network.
+
+The steps below use placeholders. Replace each one with your own value:
 
 | Placeholder | What to put there |
 |---|---|
 | `<stack-dir>` | The directory of the Docker Compose project your Sonarr/Radarr containers run in |
-| `<docker-host>` | IP address or hostname of the machine running Docker, as Jellyfin and your browser reach it |
-| `<sonarr-container>`, `<anime-sonarr-container>` | Container names of your regular and anime Sonarr, as other containers on the same Compose network reach them |
-| `<radarr-container>`, `<anime-radarr-container>` | Container names of your regular and anime Radarr |
+| `<docker-host>` | IP address or hostname of the machine running Docker, as your other devices reach it |
+| `<sonarr-container>`, `<anime-sonarr-container>` | Container names of your Sonarr instances, as other containers on the same Compose network reach them |
+| `<radarr-container>`, `<anime-radarr-container>` | Container names of your Radarr instances |
 | `<sonarr-ui-port>`, `<anime-sonarr-ui-port>`, … | Host ports each instance's own web UI is published on |
 
-Clone or copy this repository to `<stack-dir>/arrproxy`.
+The examples assume one regular and one anime instance of each app. Any
+number works; just list as many instances as you have.
 
-**1. Configuration.**
+### 1. Get the code
+
+Clone this repository into your Compose project (copy the URL from the
+**Code** button at the top of the repository page):
+
+```bash
+git clone <this-repository-url> <stack-dir>/arrproxy
+```
+
+Prefer not to keep a copy? You can build straight from GitHub instead — see
+step 4.
+
+### 2. Create your config
 
 ```bash
 mkdir -p <stack-dir>/appdata/arrproxy
 cp <stack-dir>/arrproxy/config.example.yaml <stack-dir>/appdata/arrproxy/config.yaml
 ```
 
-Edit it. For each instance, set `url` to how the proxy reaches it
-(`http://<sonarr-container>:8989`) and `public_url` to how your browser reaches
-its web UI (`http://<docker-host>:<sonarr-ui-port>`). API keys are read from the
-environment, so add them to `<stack-dir>/.env`: one per instance (each shows its
-own under **Settings → General → Security**), plus the two combined keys you will
-hand to the Jellyfin plugins:
+Open the new `config.yaml` and, for every instance, fill in:
+
+- `url` — how the **proxy** reaches the instance, e.g. `http://<sonarr-container>:8989`
+- `public_url` — how **your browser** reaches that instance's web UI, e.g.
+  `http://<docker-host>:<sonarr-ui-port>`
+
+List your main instance first — see [Instance order matters](#instance-order-matters).
+
+### 3. Add your API keys
+
+API keys are read from environment variables. Add these to `<stack-dir>/.env`:
 
 ```bash
+# Each instance's own key: in that instance, Settings -> General -> Security
 SONARR_API_KEY=<your regular Sonarr's API key>
 SONARR_ANIME_API_KEY=<your anime Sonarr's API key>
-RADARR_MOVIES_API_KEY=<your regular Radarr's API key>
+RADARR_API_KEY=<your regular Radarr's API key>
 RADARR_ANIME_API_KEY=<your anime Radarr's API key>
-ARRPROXY_SONARR_KEY=<a long random string>
-ARRPROXY_RADARR_KEY=<a different long random string>
+
+# The combined keys you'll give your apps. Make up long random values:
+ARRPROXY_SONARR_KEY=<output of: openssl rand -hex 24>
+ARRPROXY_RADARR_KEY=<a second, different random value>
 ```
 
-`openssl rand -hex 24` produces a suitable combined key. If you leave them out,
-the proxy generates keys on first start and writes them into `config.yaml` —
-read them from there; the log only shows the last four characters.
+If you leave a combined key empty, arr-proxy generates a random one on first
+start and saves it into `config.yaml` (so the config directory must be
+writable). Read it from there — the log only ever shows its last four
+characters. Saving rewrites the file without its comments, so set both keys
+yourself if you want to keep them.
 
-**2. Add the service** to `<stack-dir>/docker-compose.yml` so it shares the
-network with the *arr containers and can reach them by name:
+### 4. Add the service to Compose
+
+Add this to `<stack-dir>/docker-compose.yml`, so arr-proxy shares a network
+with your *arr containers and can reach them by name:
 
 ```yaml
   arrproxy:
     build: ./arrproxy
+    # or, without cloning:
+    # build: https://github.com/<owner>/arr-proxy.git#main
     container_name: arrproxy
     environment:
-      - TZ=${TZ}
+      - TZ=${TZ:-UTC}
       - ARRPROXY_CONFIG=/config/config.yaml
       - ARRPROXY_HEALTH_URL=http://127.0.0.1:8787/-/health
       - SONARR_API_KEY=${SONARR_API_KEY}
       - SONARR_ANIME_API_KEY=${SONARR_ANIME_API_KEY}
-      - RADARR_MOVIES_API_KEY=${RADARR_MOVIES_API_KEY}
+      - RADARR_API_KEY=${RADARR_API_KEY}
       - RADARR_ANIME_API_KEY=${RADARR_ANIME_API_KEY}
       - ARRPROXY_SONARR_KEY=${ARRPROXY_SONARR_KEY}
       - ARRPROXY_RADARR_KEY=${ARRPROXY_RADARR_KEY}
@@ -125,306 +122,292 @@ network with the *arr containers and can reach them by name:
     ports:
       - "18989:8989"   # combined Sonarr
       - "17878:7878"   # combined Radarr
-      - "18787:8787"   # unified: /sonarr/... and /radarr/...
+      - "18787:8787"   # both, under /sonarr/... and /radarr/...
     restart: unless-stopped
 ```
 
-The published host ports are shifted into the 1xxxx range so they can't clash
-with your real Sonarr and Radarr, which usually publish `8989` and `7878`
-themselves. Any free ports work.
+The host ports sit in the 1xxxx range so they don't clash with your real Sonarr
+and Radarr, which usually publish `8989` and `7878`. Any free ports work.
+Building from a GitHub URL is supported by Docker Compose on Linux.
+
+### 5. Start it and check it
 
 ```bash
-cd <stack-dir> && docker compose up -d arrproxy
-docker compose logs arrproxy | head -20
-curl -s http://<docker-host>:18787/-/health | jq
+cd <stack-dir>
+docker compose run --rm arrproxy --check   # validate the config without starting
+docker compose up -d arrproxy
+curl -s http://<docker-host>:18787/-/health
 ```
 
-`/-/health` actively probes every instance and returns 503 if an app has none
-reachable — it is what the container health check uses.
+`/-/health` contacts every instance and reports whether each is reachable, with
+its version and latency. It returns HTTP 503 if an app has no reachable
+instances, which is also what the container's health check uses.
 
-**3. Point the plugins at it** (in Jellyfin):
+### 6. Point your apps at it
 
-| Plugin | Field | Value |
+| App | Field | Value |
 |---|---|---|
 | Home Screen Sections | Sonarr URL | `http://<docker-host>:18989` |
 | | Sonarr API key | your `ARRPROXY_SONARR_KEY` |
 | | Radarr URL | `http://<docker-host>:17878` |
 | | Radarr API key | your `ARRPROXY_RADARR_KEY` |
-| SeerrFin | Sonarr / Radarr URL + key | the same two pairs |
+| SeerrFin | Sonarr / Radarr URL and key | the same two pairs |
 
-Use the direct `host:port` rather than a reverse-proxy hostname. The plugins call
-it server-side from Jellyfin, so an extra proxy hop only adds latency and one
-more thing that can break.
+Use the direct `host:port` rather than a reverse-proxy hostname. These plugins
+call it from the Jellyfin server, so an extra hop only adds latency.
 
-**4. Optional reverse proxy entry**, if you want to reach it from a browser.
-For Caddy, substituting your own domain:
+If a Jellyfin plugin doesn't pick up new settings, restart Jellyfin.
 
-```caddy
-    @arrproxy host arrproxy.example.com
-    handle @arrproxy { reverse_proxy <docker-host>:18787 }
+### Updating
+
+```bash
+cd <stack-dir>/arrproxy && git pull          # skip if you build from the GitHub URL
+cd <stack-dir> && docker compose up -d --build arrproxy
 ```
 
-Then `https://arrproxy.example.com/sonarr/api/v3/series?apikey=…`.
-
 ---
 
-## Listeners
+## Configuration
 
-Three listeners, all serving the same thing:
-
-| Port | Serves |
-|---|---|
-| `8989` | Combined Sonarr at the root — `http://<docker-host>:18989/api/v3/series` |
-| `7878` | Combined Radarr at the root — `http://<docker-host>:17878/api/v3/movie` |
-| `8787` | Both, prefixed — `/sonarr/api/v3/series`, `/radarr/api/v3/movie` |
-
-Per-app ports exist because most clients take a bare `http://host:port` and
-append `/api/v3` themselves. The unified port is there if you prefer one.
-
-Authentication accepts `X-Api-Key` (any casing), `?apikey=`, or
-`Authorization: Bearer`. The combined key is validated and then **replaced**
-with that instance's own key before the request goes upstream — a backing
-instance never sees the combined key, and the combined key is never a valid
-credential on an instance.
-
-`/ping`, `/-/health` and `/-/version` need no key.
-
----
-
-## What each endpoint does
-
-| Endpoint | Behaviour |
-|---|---|
-| `GET /series`, `/movie`, `/qualityprofile`, `/rootfolder`, `/tag`, `/customformat`, `/collection`, … | Fan out, concatenate, translate ids |
-| `GET /calendar` | Fan out and **re-sort** — by `airDateUtc` for Sonarr, by the first present of `inCinemas` / `digitalRelease` / `physicalRelease` for Radarr |
-| `GET /queue`, `/history`, `/wanted/missing`, `/wanted/cutoff`, `/blocklist` | Paged merge: sorted globally, windowed to the requested page, `totalRecords` summed over the instances that answered |
-| `GET /series/lookup`, `/movie/lookup` | Merged and de-duplicated by external id, keeping the row from whichever instance already has the title added |
-| `GET /health` | Merged, each item prefixed with the instance it came from |
-| `GET /diskspace` | Merged, collapsing mounts the instances share |
-| `GET /queue/status` | Counters summed |
-| `GET /system/status` | Primary's status with `instanceName` replaced and an `arrProxy` block listing instances. `appName` is left exactly as-is — clients branch on it |
-| `GET/PUT/DELETE /…/{id}` | Routed to the owning instance |
-| `GET /episode?seriesId=…` | Routed by the id in the query; only that instance is contacted |
-| `GET /MediaCover/{id}/…` | Routed to the owning instance, bytes streamed back |
-| `GET /series/{slug}`, `/movie/{slug}`, `/add/new` | **Not API paths.** SeerrFin's "Open in Sonarr" buttons; 302-redirected to the owning instance's own web UI (see below) |
-| `POST /series`, `/movie` | Routed (see below) |
-| `POST /command` | Routed if it names an entity, broadcast to every instance if it is global (`RssSync`, `RefreshMonitoredDownloads`) |
-| `PUT/DELETE /…/editor`, `/queue/bulk` | Ids split per instance, each instance gets only its own |
-| anything else | Shape-driven fallback: a list aggregates, a paged envelope pages, anything else comes from the primary |
-
-Two response headers make behaviour visible: `X-ArrProxy-Instances` names who
-served the request, and `X-ArrProxy-Degraded` appears when an instance could not
-be reached.
-
-### "Open in Sonarr" buttons
-
-SeerrFin renders buttons that link into the *arr web UI: `{base}/series/{titleSlug}`
-when it has matched the title to your library, and `{base}/add/new?term=tmdb:N`
-when it hasn't. Point it at the proxy and those would 404, because the proxy
-serves no web UI.
-
-So the proxy answers those three non-API paths with a **302** to whichever
-instance actually owns the title. Set `public_url` on each instance for it to
-work: `url` is a container name the browser cannot resolve.
-
-`/add/new` links need care. SeerrFin produces them for titles that **are** in a
-library too — it drops a monitored title's progress entry, link included, while
-nothing is downloaded yet. So rather than send every add link to the default
-instance, the proxy works out who owns the title, cheapest check first:
-
-1. **Your libraries.** The TMDB/TVDB/IMDb id is matched against every
-   instance's own library listing. That's a local read, around 10ms, so a
-   click on a title you already have is instant.
-2. **Each instance's metadata lookup**, only when no library lists that id.
-   This is a trip to the internet and can take a few seconds the first time a
-   title is looked up. It still finds titles whose stored id is out of date
-   (Sonarr marks a lookup result with its library id when it holds the show),
-   and supplies the genres your routing rules match on.
-
-Either way the browser lands on the title's page on the instance that has it.
-A title nobody holds keeps its add form, on whichever instance your routing
-rules claim it for, or the default.
+[`config.example.yaml`](config.example.yaml) is fully commented. A trimmed
+version:
 
 ```yaml
+apps:
+  sonarr:
+    api_key: ${ARRPROXY_SONARR_KEY}     # the combined key your apps use
+    port: 8989
+    instances:
+      - name: sonarr                    # listed first: see "Instance order matters"
+        url: http://<sonarr-container>:8989
+        api_key: ${SONARR_API_KEY}
+        public_url: http://<docker-host>:<sonarr-ui-port>
+        default: true                   # new series go here unless a rule matches
       - name: sonarr-anime
-        url: http://<anime-sonarr-container>:8989                # how the proxy reaches it
-        public_url: http://<docker-host>:<anime-sonarr-ui-port>  # how your browser reaches it
+        url: http://<anime-sonarr-container>:8989
+        api_key: ${SONARR_ANIME_API_KEY}
+        public_url: http://<docker-host>:<anime-sonarr-ui-port>
+        routing:
+          series_types: [anime]
 ```
 
-These paths are **unauthenticated** — a browser following a button has no API
-key to present. They only issue a redirect to an instance the viewer can already
-reach, and the API itself stays behind the key.
+`${VAR}` and `${VAR:-default}` are filled in from the environment.
 
-Every redirect records why it went where it did, in an
-`X-ArrProxy-Resolution` header and in the log: `library` (an instance holds the
-title), `rule` (a routing rule claimed it) or `default` (nothing did).
-
-### Where a newly added title goes
-
-In priority order:
-
-1. **A virtual id in the payload.** If the client picked `qualityProfileId:
-   10000004`, that profile belongs to instance 1, so the series goes to instance
-   1. This needs no configuration and is exact, because the client got that id
-   from this proxy in the first place.
-2. **A configured rule** — `series_types`, `genres`, `root_folders`,
-   `title_regex`.
-3. **The instance marked `default: true`.**
-
----
-
-## Configuration reference
-
-See [`config.example.yaml`](config.example.yaml) for the annotated version.
+### All settings
 
 | Key | Default | Meaning |
 |---|---|---|
-| `server.unified_port` | `8787` | Prefixed listener; `null` disables it |
-| `server.cache_ttl` | `5` | Seconds to hold a fanned-out GET. `0` disables |
-| `server.fail_open` | `true` | Serve partial results when an instance is down, instead of failing |
-| `server.id_block` | `10000000` | Ids per instance per entity type |
-| `server.id_fallback_probe` | `true` | Retry a 404 for an ambiguous id against the other instances (reads only) |
-| `server.timeout` / `connect_timeout` | `30` / `5` | Upstream timeouts, seconds |
-| `server.fanout_timeout` | `10` | Seconds one instance may hold up a fanned-out **read** before being dropped from it. Writes are never cut short |
-| `apps.<app>.api_key` | generated | The key clients present |
-| `apps.<app>.port` | 8989 / 7878 | That app's dedicated listener |
-| `apps.<app>.instances[].default` | first | Where creates land with no other signal |
-| `apps.<app>.instances[].enabled` | `true` | Set `false` to take one out of rotation |
-| `apps.<app>.instances[].public_url` | `url` | Browser-reachable address of that instance's own web UI, for deep links |
+| `server.host` | `0.0.0.0` | Address to listen on |
+| `server.unified_port` | `8787` | The listener serving both apps under `/sonarr` and `/radarr`; `null` turns it off |
+| `server.log_level` | `info` | `debug` also logs every request |
+| `server.cache_ttl` | `5` | Seconds to reuse a merged read; `0` turns caching off |
+| `server.fail_open` | `true` | Serve partial results when an instance is down, instead of failing the request |
+| `server.fanout_timeout` | `10` | Seconds one instance may hold up a merged **read** before it is left out. Writes are never cut short |
+| `server.timeout` / `server.connect_timeout` | `30` / `5` | Upstream request timeouts, in seconds |
+| `server.id_block` | `10000000` | Ids reserved per instance (see [How ids work](#how-ids-work)) |
+| `server.id_fallback_probe` | `true` | If a read for an id 404s, try the id on the other instances (reads only) |
+| `server.max_page_fetch` | `2000` | Most rows fetched per instance to build one merged page |
+| `apps.<app>.api_key` | generated | The combined key your apps present |
+| `apps.<app>.port` | `8989` / `7878` | That app's dedicated listener |
+| `apps.<app>.instance_name` | `Sonarr (combined)` | The name reported in `system/status` |
+| `apps.<app>.instances[].name` | — | A label used in logs and response headers |
+| `apps.<app>.instances[].url` | — | How the proxy reaches the instance (include any URL base, e.g. `http://<sonarr-container>:8989/sonarr`) |
+| `apps.<app>.instances[].api_key` | — | That instance's own API key |
+| `apps.<app>.instances[].public_url` | `url` | How a browser reaches the instance's web UI, for "Open in" links |
+| `apps.<app>.instances[].default` | first | Where new titles go when nothing else decides |
+| `apps.<app>.instances[].enabled` | `true` | Set to `false` to take an instance out of rotation |
+| `apps.<app>.instances[].routing` | — | Rules for new titles (below) |
 
-`${VAR}` and `${VAR:-default}` are expanded from the environment.
+Supported apps are `sonarr` and `radarr`. `lidarr` and `readarr` configurations
+are accepted but untested.
 
-Instance **order is significant**: the first is index 0 and identity mapped.
-Put your largest instance first, and do not reorder the list afterwards — that
-would renumber every virtual id.
+### Where a newly added title goes
 
----
+When something adds a series or movie through the proxy, it goes to the first
+match of:
 
-## Caveats worth knowing
+1. **The instance the client's choices came from.** A quality profile or tag
+   the client picked from the proxy's lists belongs to exactly one instance, so
+   the title goes there. This needs no configuration.
+2. **A routing rule** on an instance: `series_types`, `genres`, `root_folders`
+   or `title_regex`.
+3. **The instance marked `default: true`.**
 
-- **`cache_ttl` means up to 5 seconds of staleness** on aggregate reads. A write
-  through the proxy clears the cache; a change made directly in a *arr's own UI
-  does not. Set it to `0` if that bothers you. Partial (degraded) answers are
-  never cached, so an instance blipping cannot leave half your library missing
-  for a whole TTL afterwards.
-- **The same title in both instances shows up twice.** Nothing de-duplicates
-  library rows or calendar entries, on purpose: two entries means two instances
-  are genuinely tracking it, which is usually a mistake you want to see rather
-  than one the proxy quietly hides. (`/lookup` *is* de-duplicated — those rows
-  are metadata from a shared upstream, not library state.)
-- **An id at or above `id_block` breaks routing**, because it lands inside the
-  next instance's range. That needs ten million rows of one entity type in one
-  instance, so it should never happen; if it does, the proxy logs an error
-  naming the id and telling you to raise `id_block`.
-- **A unanimous upstream error is relayed as-is.** If every instance answers
-  404, so does the proxy — a missing endpoint is an answer, not an outage. Only
-  a genuine failure to reach any instance, or instances disagreeing about the
-  error, produces a 502.
-- **An instance under a `urlBase`** works: give the full base in `url`, e.g.
-  `http://<sonarr-container>:8989/sonarr`. The proxy always reports `urlBase: ""` in
-  `system/status` because the proxy itself serves at the root.
-- **Seerr's `externalServiceId`.** Seerr talks to your instances directly, so it
-  stores the id the *real* instance assigned. When SeerrFin uses that id against
-  the proxy, an id belonging to a non-primary instance looks like a primary id.
-  Its main code path matches by `tmdbId` over the full list, which merges
-  correctly; the id path is only a fallback, and `id_fallback_probe` recovers it
-  by retrying other instances on a 404. Probing is **reads only** — a write is
-  never retried against a guessed instance.
-- **Tag labels can appear twice** in the merged list. They are genuinely
-  different tags on different instances; only the ids are made unique.
-- **Custom format and quality definition ids are not namespaced** — they are
-  displayed, never routed on, and namespacing them would corrupt what you see.
-- **`system/status` reports the primary's version.** If your instances run
-  different versions, that is the one clients see; `/-/health` shows all of them.
-- **This is not a security boundary.** It holds your instance API keys and runs
-  in the same trust domain. Keep it on your private network, never exposed to
-  the internet.
-- **Writes are best served directly.** Routing a create is a heuristic, however
-  good. Anything that can already talk to every instance — Seerr, for one —
-  should keep doing so.
+### Instance order matters
+
+The first instance in each list keeps its own ids; later instances are shifted
+(see below). **Put your main instance first, and don't reorder the list
+later** — that would change every id your apps have seen.
 
 ---
 
-## Testing
+## How it works
 
-```powershell
-.\run-tests.ps1              # everything
-.\run-tests.ps1 -Suite mock  # just the scripted stack
-.\run-tests.ps1 -Suite real -Keep
+### How ids work
+
+Every Sonarr numbers its series, episodes, tags and profiles from 1, so two
+instances will both have a "series 1". arr-proxy gives each instance its own
+id range:
+
+```
+proxy id = instance id + (position in list × 10,000,000)
 ```
 
-```bash
-./run-tests.sh               # everything
-./run-tests.sh real          # just the genuine-instance stack
-KEEP=1 ./run-tests.sh mock
-```
+| Instance | Its id | Id your apps see |
+|---|---|---|
+| 1st in the list | 1 | **1** |
+| 2nd | 1 | **10000001** |
+| 3rd | 1 | **20000001** |
 
-Three layers, all run in containers so nothing needs installing on the host:
+Nothing is stored, so ids survive restarts. Ids local to one instance are
+translated (`id`, `seriesId`, `episodeId`, `movieId`, `qualityProfileId`,
+`tags`, the id inside `/MediaCover/…` URLs, and so on). Ids that identify a
+title everywhere — `tvdbId`, `tmdbId`, `imdbId` — are never touched, and
+neither are quality and language ids, which are the same on every instance.
 
-| Suite | What it proves |
+<details>
+<summary><b>What each endpoint does</b></summary>
+
+| Endpoint | Behaviour |
 |---|---|
-| **unit** (126 tests) | Id translation, merge strategies, config validation, the route table, and instance selection, in isolation |
-| **mock end-to-end** (101 tests + 17 failure-mode checks) | The proxy over real HTTP against four scripted instances with deliberately colliding ids. Each mock records the requests it receives, so routing is asserted by *which instance was contacted*, not inferred from the body |
-| **real end-to-end** (41 tests) | The same proxy against four genuine `linuxserver/sonarr` and `linuxserver/radarr` containers, with real titles fetched from the live metadata servers |
+| `GET /series`, `/movie`, `/qualityprofile`, `/rootfolder`, `/tag`, … | Asked of every instance, combined, ids translated |
+| `GET /calendar` | Combined and re-sorted by air or release date |
+| `GET /queue`, `/history`, `/wanted/missing`, `/wanted/cutoff`, `/blocklist` | Paged across all instances, with a correct combined total |
+| `GET /series/lookup`, `/movie/lookup` | Combined, with duplicates collapsed to the copy an instance already has |
+| `GET /health`, `/diskspace`, `/queue/status` | Combined (health items name their instance; shared disks counted once; counters summed) |
+| `GET /system/status` | The first instance's status, renamed, plus a list of instances |
+| `GET/PUT/DELETE /…/{id}` | Sent to the instance that owns the id |
+| `GET /episode?seriesId=…` | Sent only to the instance that owns the series |
+| `GET /MediaCover/{id}/…` | Image fetched from the owning instance |
+| `POST /series`, `/movie` | Sent to one instance (see [Where a newly added title goes](#where-a-newly-added-title-goes)) |
+| `POST /command` | Sent to the owning instance, or to every instance for global commands like `RssSync` |
+| Anything else | Lists are combined, paged results are paged, everything else comes from the first instance |
 
-The real suite is the one that matters most. Four fresh instances each number
-their series, tags and quality profiles from 1, so every id collides — the exact
-condition this proxy exists to resolve. It checks, among other things, that
-twelve quality profiles merge without collision, that a real
-`/MediaCover/…/poster.jpg` URL is rewritten and still serves the right
-instance's bytes, that `/series/lookup` collapses a title both instances know
-while keeping the one that actually has it, and that a write reaches only the
-owning instance — verified by querying the instances directly, never through the
-proxy.
+</details>
 
-The failure-mode checks stop and restart containers to confirm that one
-instance going down degrades to partial results with a header rather than a
-hard error, that a total outage returns 502 rather than an empty library, that
-a partial answer never enters the cache, and that recovery is automatic.
+Response headers show what happened:
 
-A dedicated edge-case suite covers where these pieces surprise each other: an
-id naming an instance nobody configured (which must narrow the request to
-nothing, never silently widen it to every instance), a status code that must
-not carry a body, an API key with characters that cannot travel in an HTTP
-header, Japanese titles round-tripping through the merge, page numbers that are
-zero or negative or absurd, one instance hanging while the others answer, and
-the browser deep links above.
+- `X-ArrProxy-Instances` — which instances answered
+- `X-ArrProxy-Degraded` — which instances couldn't be reached (results are partial)
+- `X-ArrProxy-Cache: hit` — served from the short-lived cache
+- `X-ArrProxy-Resolution` — for "Open in" links: `library`, `rule` or `default`
+
+If one instance is down, you get the others' results with `X-ArrProxy-Degraded`
+set, and partial results are never cached. If every instance is down, you get a
+502 explaining why. If every instance answers with the same error (say, a 404),
+that error is passed through unchanged.
+
+### "Open in Sonarr/Radarr" links
+
+SeerrFin's buttons link into the Sonarr/Radarr web interface, which the proxy
+doesn't serve. So the proxy answers those links — `/series/{name}`,
+`/movie/{name}` and `/add/new?term=tmdb:…` — with a redirect to the right
+instance's own web UI, using that instance's `public_url`.
+
+To find the right instance for an "add new" link, it first checks your
+libraries (a fast local read), and only if no library has the title does it
+ask each instance to look it up online (which can take a few seconds the first
+time). A title you already have opens on the instance that has it; a title
+nobody has opens the add form on the instance your routing rules pick.
 
 ---
 
-## Operating it
+## Security
+
+- **Keep arr-proxy on your private network.** Never expose its ports to the
+  internet. It is a convenience layer, not a security boundary.
+- **A combined key is as powerful as your instance keys.** Anyone holding it
+  can do anything through the proxy that your instances' API allows, on every
+  instance behind it. Use long random values, and treat them like passwords.
+- **Never commit** your `.env` or `config.yaml`.
+- **Your instance keys stay server-side.** The proxy strips the key a client
+  sends and uses each instance's own key upstream. Keys are compared in
+  constant time, and the startup log shows only a key's last four characters.
+- **Send the key in the `X-Api-Key` header, not `?apikey=`.** At
+  `log_level: debug` every request line is logged, query string included.
+- **Some endpoints need no key**, by design:
+  - `/ping`, `/-/version` and `/` report that the proxy is running, its version,
+    and the names of your configured instances.
+  - `/-/health` reports each instance's internal address, reachability and
+    version.
+  - "Open in" links (`/series/…`, `/movie/…`, `/add/new`) redirect a browser —
+    which has no key to send — to the instance holding that title. Anyone who
+    can reach the proxy can use them to check whether a title is in one of
+    your libraries.
+
+---
+
+## Troubleshooting
 
 ```bash
-python -m arrproxy --config /config/config.yaml --check   # validate and exit
-docker compose logs -f arrproxy
-curl -s http://<docker-host>:18787/-/health | jq
-```
+# Is everything reachable?
+curl -s http://<docker-host>:18787/-/health
 
-Useful when something looks wrong:
-
-```bash
-# Who served this request?
+# Which instances answered this request?
 curl -sI -H "X-Api-Key: $KEY" http://<docker-host>:18989/api/v3/series | grep -i arrproxy
 
-# Does a virtual id decode where you expect? 10000001 -> instance 1, real id 1
-curl -s -H "X-Api-Key: $KEY" http://<docker-host>:18989/api/v3/series/10000001 | jq .title
+# Where did "Open in" links go, and why?
+docker compose logs arrproxy | grep "deep link"
 ```
 
 | Symptom | Likely cause |
 |---|---|
-| 401 from the proxy | Presenting an *instance's* key instead of the combined one, or the Radarr key on the Sonarr port |
-| Only one instance's titles appear | Check `X-ArrProxy-Degraded` and `/-/health`; the other instance is unreachable |
-| 502 `no backing instance answered` | Every instance for that app is down; the detail names each failure |
-| Plugin shows nothing | Confirm it points at the proxy's published port (`18989`/`17878` in the example), not a real instance's |
-| Ids look wrong after a config change | Instances were reordered; index 0 must stay index 0 |
-| An endpoint returns 404 through the proxy | Every instance returned 404 — the path really is absent, not a proxy fault |
-| "Open in Sonarr" lands on a dead page | Set `public_url` on each instance to a browser-reachable address |
-| "Open in Sonarr" lands on the wrong instance | `docker compose logs arrproxy \| grep "deep link"` shows each click and why it resolved as it did; `default` means no instance reported owning that title |
-| One instance's data is intermittently missing | It is exceeding `fanout_timeout`; check that instance's own responsiveness |
-| Log says an id is `>= id_block` | Raise `server.id_block` above the id it names and restart |
+| `401 Unauthorized` | You're sending an instance's own key instead of the combined key, or the Radarr key to the Sonarr port |
+| Only one instance's titles appear | Another instance is unreachable — check `X-ArrProxy-Degraded` and `/-/health` |
+| `502 no backing instance answered` | Every instance for that app is down; the response says why for each |
+| An app shows nothing | It points at an instance's own port instead of the proxy's (`18989` / `17878` in the example) |
+| A 404 through the proxy | Every instance returned 404 — the thing really isn't there |
+| "Open in" opens a page that won't load | Set `public_url` on each instance to an address your browser can reach |
+| "Open in" opens the wrong instance | `docker compose logs arrproxy \| grep "deep link"` shows each click; `default` means no instance reported having that title |
+| One instance's data is sometimes missing | It's slower than `fanout_timeout` — check that instance |
+| Ids changed after editing the config | The instance list was reordered — put it back |
+| Log says an id is `>= id_block` | Raise `server.id_block` above that id and restart |
+
+---
+
+## Limitations
+
+- **Merged reads can be up to `cache_ttl` seconds stale.** Changes made through
+  the proxy clear the cache; changes made in an instance's own UI don't. Set
+  `cache_ttl: 0` if that matters to you.
+- **A title in two instances appears twice.** That's deliberate — it usually
+  means something is being tracked twice, which you'd want to see.
+- **Tags with the same name on two instances appear twice.** They really are
+  different tags.
+- **`system/status` shows the first instance's version.** `/-/health` shows
+  every instance's.
+- **Adding titles through the proxy relies on the rules above.** Tools that can
+  talk to each instance directly should.
+- **Ids from outside the proxy can be ambiguous.** A tool that stores an
+  instance's own id elsewhere (Seerr does) and later asks the proxy for it may
+  reach the first instance's item with that number. For reads, the proxy
+  retries other instances when that returns 404; writes are never guessed.
+
+---
+
+## Development
+
+Tests run in containers, so nothing needs installing besides Docker.
+
+```bash
+./run-tests.sh          # everything
+./run-tests.sh unit     # unit tests only
+./run-tests.sh mock     # end-to-end against scripted instances
+./run-tests.sh real     # end-to-end against real Sonarr and Radarr containers
+KEEP=1 ./run-tests.sh   # leave the test containers running afterwards
+```
+
+On Windows, use `.\run-tests.ps1` with `-Suite unit|mock|real` and `-Keep`.
+
+| Suite | What it covers |
+|---|---|
+| unit | Id translation, merging, config validation, routing decisions |
+| mock end-to-end | The proxy over real HTTP against four scripted instances with colliding ids — each records the requests it receives, so tests check which instance was actually contacted |
+| failure modes | Instances stopped and restarted mid-test: partial results, total outages, recovery, and that partial results are never cached |
+| real end-to-end | Four real `linuxserver/sonarr` and `linuxserver/radarr` containers with real titles from the live metadata servers |
 
 ## Requirements
 
-Python 3.11+ (the image uses 3.12); `starlette`, `uvicorn`, `httpx`, `PyYAML`.
-Runs unprivileged in the container. Only `/config` needs to be writable, and
-only to persist a generated API key.
+Python 3.11+ (the Docker image uses 3.12) with `starlette`, `uvicorn`, `httpx`
+and `PyYAML`. The container runs as an unprivileged user; only `/config` needs
+to be writable, and only to save a generated key.

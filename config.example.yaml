@@ -1,7 +1,7 @@
 # arr-proxy configuration
 #
 # Copy to <stack-dir>/appdata/arrproxy/config.yaml, then replace every
-# <placeholder> with your own value -- README.md -> Deploying explains each one.
+# <placeholder> with your own value -- README.md -> Quick start explains each one.
 # Every *arr shows its own API key at Settings -> General -> Security.
 #
 # ${VAR} and ${VAR:-default} are expanded from the environment, so the keys can
@@ -50,9 +50,10 @@ server:
 
 apps:
   sonarr:
-    # The single key you give the Jellyfin plugins.  Invent any long random
-    # string; leave it out and one is generated and written back to this file.
-    api_key: ${ARRPROXY_SONARR_KEY:-change-me-to-a-long-random-string}
+    # The single key you give the Jellyfin plugins.  Set ARRPROXY_SONARR_KEY in
+    # .env to a long random string (openssl rand -hex 24).  If it is unset or
+    # empty, a key is generated and written back to this file instead.
+    api_key: ${ARRPROXY_SONARR_KEY}
     port: 8989
     instance_name: Sonarr (combined)
 
@@ -81,14 +82,14 @@ apps:
           # genres: [Animation, Anime]
 
   radarr:
-    api_key: ${ARRPROXY_RADARR_KEY:-change-me-to-another-long-random-string}
+    api_key: ${ARRPROXY_RADARR_KEY}             # unset or empty: one is generated
     port: 7878
     instance_name: Radarr (combined)
 
     instances:
       - name: radarr
         url: http://<radarr-container>:7878
-        api_key: ${RADARR_MOVIES_API_KEY}
+        api_key: ${RADARR_API_KEY}
         public_url: http://<docker-host>:<radarr-ui-port>
         default: true
 

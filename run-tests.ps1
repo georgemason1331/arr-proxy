@@ -56,6 +56,8 @@ if ($Suite -in 'unit', 'all') {
     Invoke-Step 'unit' {
         $env:MSYS_NO_PATHCONV = '1'
         docker run --rm -v "${root}\tests\unit:/tests/unit:ro" `
+            -v "${root}\config.example.yaml:/tests/config.example.yaml:ro" `
+            -e ARRPROXY_EXAMPLE_CONFIG=/tests/config.example.yaml `
             -e PYTHONPATH=/app -w /app --entrypoint python arrproxy-tester:e2e `
             -m pytest /tests/unit -q -p no:cacheprovider
     }

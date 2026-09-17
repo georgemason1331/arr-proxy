@@ -23,6 +23,8 @@ if [[ "$SUITE" == "unit" || "$SUITE" == "all" ]]; then
   phase "Unit tests"
   step unit env MSYS_NO_PATHCONV=1 docker run --rm \
     -v "$ROOT/tests/unit:/tests/unit:ro" -e PYTHONPATH=/app -w /app \
+    -v "$ROOT/config.example.yaml:/tests/config.example.yaml:ro" \
+    -e ARRPROXY_EXAMPLE_CONFIG=/tests/config.example.yaml \
     --entrypoint python arrproxy-tester:e2e -m pytest /tests/unit -q -p no:cacheprovider
 fi
 

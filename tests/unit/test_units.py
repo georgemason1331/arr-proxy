@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 
 import pytest
@@ -310,6 +312,43 @@ class TestConfig:
         assert cfg.load(write(tmp_path, text)).apps["sonarr"].api_key == "fallback-key"
 
     @pytest.mark.parametrize(
+        "key",
+        [
+            "change-me-to-a-long-random-string",
+            "CHANGE-ME-please-1234",
+            # What the old example config fell back to when the variable was unset.
+            "${ABSENT_VAR:-change-me-to-a-long-random-string}",
+        ],
+    )
+    def test_the_published_placeholder_is_refused(self, tmp_path, key) -> None:
+        """Earlier example configs shipped these strings, so they are not secrets."""
+        with pytest.raises(cfg.ConfigError, match="placeholder"):
+            cfg.load(write(tmp_path, BASE_CONFIG.format(key=key)))
+
+    @pytest.mark.parametrize("empty", [False, True], ids=["unset", "empty"])
+    def test_an_unset_key_variable_generates_a_key(self, tmp_path, monkeypatch, empty) -> None:
+        """Compose passes an empty string for a variable missing from .env."""
+        if empty:
+            monkeypatch.setenv("COMBINED_KEY", "")
+        else:
+            monkeypatch.delenv("COMBINED_KEY", raising=False)
+        path = write(tmp_path, BASE_CONFIG.format(key="${COMBINED_KEY}"))
+        generated = cfg.load(path).apps["sonarr"].api_key
+        assert re.fullmatch(r"[0-9a-f]{32}", generated)
+        assert cfg.load(path).apps["sonarr"].api_key == generated
+
+    def test_saving_a_generated_key_writes_no_other_secret(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("INSTANCE_KEY", "instance-secret-value")
+        text = BASE_CONFIG.replace("    api_key: {key}\n", "").replace(
+            "api_key: a", "api_key: ${INSTANCE_KEY}"
+        )
+        path = write(tmp_path, text)
+        cfg.load(path)
+        saved = path.read_text(encoding="utf-8")
+        assert "${INSTANCE_KEY}" in saved, "references stay references"
+        assert "instance-secret-value" not in saved
+
+    @pytest.mark.parametrize(
         "mutation,message",
         [
             ("      - name: main\n        url: http://a\n        api_key: a\n"
@@ -362,6 +401,42 @@ class TestConfig:
     def test_malformed_yaml_is_reported_clearly(self, tmp_path) -> None:
         with pytest.raises(cfg.ConfigError, match="not valid YAML"):
             cfg.load(write(tmp_path, "apps:\n  sonarr:\n   - [unclosed\n"))
+
+
+EXAMPLE_CONFIG = Path(
+    os.environ.get("ARRPROXY_EXAMPLE_CONFIG")
+    or Path(__file__).resolve().parents[2] / "config.example.yaml"
+)
+
+
+class TestShippedExample:
+    """config.example.yaml is what people copy, so it has to work as documented."""
+
+    INSTANCE_KEYS = ("SONARR_API_KEY", "SONARR_ANIME_API_KEY", "RADARR_API_KEY", "RADARR_ANIME_API_KEY")
+
+    @pytest.fixture
+    def example(self, tmp_path, monkeypatch) -> Path:
+        for var in self.INSTANCE_KEYS:
+            monkeypatch.setenv(var, f"{var.lower()}-value")
+        for var in ("ARRPROXY_SONARR_KEY", "ARRPROXY_RADARR_KEY"):
+            monkeypatch.delenv(var, raising=False)
+        return write(tmp_path, EXAMPLE_CONFIG.read_text(encoding="utf-8"))
+
+    def test_it_loads(self, example) -> None:
+        settings = cfg.load(example)
+        assert set(settings.apps) == {"sonarr", "radarr"}
+        for app in settings.apps.values():
+            assert len(app.instances) == 2
+            assert app.default_instance is app.instances[0]
+
+    def test_unset_combined_keys_are_generated_never_defaulted(self, example) -> None:
+        keys = [app.api_key for app in cfg.load(example).apps.values()]
+        assert all(re.fullmatch(r"[0-9a-f]{32}", key) for key in keys), keys
+        assert len(set(keys)) == len(keys), "each app gets its own key"
+        saved = example.read_text(encoding="utf-8")
+        for var in self.INSTANCE_KEYS:
+            assert "${%s}" % var in saved
+            assert f"{var.lower()}-value" not in saved
 
 
 class TestRoutingRules:
@@ -772,6 +847,19 @@ class TestAddLinkResolution:
         inst, _, _, how = self.resolve(tmp_path, upstream, "tmdb:0")
         assert (inst.name, how) == ("main", "default")
         assert upstream.calls == []
+
+    @pytest.mark.parametrize(
+        "term", ["imdb:None", "imdb:null", "imdbid:tt", "imdb:0", "tvdb:-3", "tmdb:abc"]
+    )
+    def test_malformed_ids_match_nothing(self, tmp_path, term) -> None:
+        """A client with no id may send "None"; titles lacking that id must not claim it."""
+        upstream = StubUpstream(libraries={"anime": [
+            {"id": 1, "imdbId": None, "tvdbId": None, "tmdbId": None, "titleSlug": "no-ids"},
+            {"id": 2, "titleSlug": "no-id-fields"},
+        ]})
+        inst, path, _, how = self.resolve(tmp_path, upstream, term)
+        assert (inst.name, path, how) == ("main", "/add/new", "default")
+        assert upstream.calls == [], "a malformed id is not worth a round trip"
 
     def test_unowned_title_follows_a_routing_rule(self, tmp_path) -> None:
         upstream = StubUpstream(lookups={"main": [{"id": 0, "seriesType": "anime"}],
